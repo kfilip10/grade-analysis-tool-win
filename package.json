@@ -1,0 +1,67 @@
+{
+  "name": "EB-yarn",
+  "version": "1.0.9",
+  "description": "Test using EB and yarn",
+  "main": "src/index.js",
+  "repository": "https://github.com/kfilip10/yarn2",
+  "author": "Kevin Filip",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=always"
+  },
+  "build": {
+    "appId": "com.electron.eb-yarn",
+    "productName": "YourProductName", 
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kfilip10",
+        "repo": "yarn2",
+        "private": false,
+        "releaseType": "draft"
+      }
+    ],
+    "directories": {
+      "output": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "kfilip10",
+          "repo": "yarn2",
+          "private": false,
+          "releaseType": "draft"
+        }
+      ]
+    },
+    "nsis": {
+      "include": "build/installer.nsh",
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "menuCategory": true,
+      "shortcutName": "EB-yarn"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  },
+  "dependencies": {
+    "electron-builder-squirrel-windows": "^24.10.0",
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.9.1",
+    "electron": "^28.0.0"
+  }
+}
