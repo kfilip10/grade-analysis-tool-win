@@ -1,25 +1,30 @@
 {
-  "name": "Grade-Analysis-Tool",
-  "version": "1.0.9",
-  "description": "Test using EB and yarn",
+  "name": "grade-analysis-tool",
+  "version": "1.1.1",
+  "type": "module",
+  "description": "Analyzes grades from excel and canvas.",
   "main": "src/index.js",
   "repository": "https://github.com/kfilip10/grade-analysis-tool-win",
   "author": "Kevin Filip",
   "license": "MIT",
   "private": false,
   "scripts": {
-    "start": "electron .",
+    "start": "echo Running Electron... && electron .",
     "build": "electron-builder",
     "dist": "electron-builder --publish=always"
   },
   "build": {
+    "asar": false,
     "appId": "com.pane",
     "productName": "Grade Analysis Tool",
+    "extraResources": [
+      "src/**/*"
+    ],
     "publish": [
       {
         "provider": "github",
         "owner": "kfilip10",
-        "repo": "yarn2",
+        "repo": "grade-analysis-tool-win",
         "private": false,
         "releaseType": "draft"
       }
@@ -57,11 +62,24 @@
     }
   },
   "dependencies": {
-    "electron-builder-squirrel-windows": "^24.10.0",
-    "electron-updater": "^6.1.7"
+    "axios": "^1.6.3",
+    "electron-updater": "^6.1.7",
+    "esm": "^3.2.25",
+    "execa": "^5.1.1"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
+    "@babel/core": "^7.21.0",
+    "@babel/plugin-transform-async-to-generator": "^7.20.7",
+    "@babel/preset-env": "^7.20.2",
+    "@babel/preset-react": "^7.18.6",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.35.0",
+    "eslint-config-airbnb": "^19.0.4",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-jsx-a11y": "^6.7.1",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "fs-extra": "^11.1.0"
   }
 }
