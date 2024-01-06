@@ -3,7 +3,7 @@
 createHomePage <- function() {
   fluidRow(
     column(width = 7,
-    h3("Welcome to PANE Grade Report Generator! Now with automatic Updates!"),
+    h3("Welcome to PANE Grade Report Generator! Now with automatic updates!"),
     tags$hr(),
     tags$p("There are two ways to make a grade report, both of which result in a nearly identical grades brief"),
     tags$ol(

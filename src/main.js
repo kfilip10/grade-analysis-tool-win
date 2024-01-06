@@ -1,89 +1,86 @@
-// Adapted from  Adapted from https://github.com/lawalter/r-shiny-electron-app?tab=readme-ov-file   -->
-// Modified to work with ECMAScript modules (ESM) and Electron 12 
-// Base code: Copyright (c) 2018 Dirk Schumacher, Noam Ross, Rich FitzJohn
+// Adapted from https://github.com/lawalter/r-shiny-electron-app?tab=readme-ov-file   -->
+// Modified to work with ECMAScript modules (ESM) and Electron 12  KTF 5JAN24
+// Based code from "Copyright (c) 2018 Dirk Schumacher, Noam Ross, Rich FitzJohn" at link above
+// Generally the R server generation is from the base code, but the rest is modified by KTF
 
+//Imports most of the packages
 import { app, session, BrowserWindow } from 'electron'
+import path from 'path' //used for __dirname since it isn't available in ESM
+import { fileURLToPath } from 'url'; //
+import http from 'axios' // used to make server
+import os from 'os' // used to get platform
+import execa from 'execa' // used to run R
+import fs from 'fs' // used to read and write files
+import { randomPort, waitFor, getRPath } from './helpers.js' //helper functions for R and porting
 
-import path from 'path'
-//import * from 'update-electron-app'
+const rPath = getRPath(os.platform()) //gets the path for R based on platform
+const __dirname = path.dirname(fileURLToPath(import.meta.url)); //gets the directory name for the current file
 
 
+//Settings to relaunch afte first install - Not totally needed
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'appSettings.json');
+let appSettings = {};
+// Read existing settings or initialize if not present
+if (fs.existsSync(SETTINGS_FILE)) {
+    appSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+} else {
+    appSettings = { firstLaunch: true, firstUpdate: true };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(appSettings));
+}
 
-import http from 'axios'
-import os from 'os'
-import execa from 'execa'
 
-import { randomPort, waitFor, getRPath } from './helpers.js'
+// Auto updater section
+import  pkg from 'electron-updater' 
+const {autoUpdater} = pkg; //electron-updater is a common JS module, so we need to import it this way
+autoUpdater.autoDownload = true; //automatically download updates
+autoUpdater.autoInstallOnAppQuit = true; //automatically install updates on quit
 
-const rPath = getRPath(os.platform())
-import { fileURLToPath } from 'url';
+//posts log files to AppData/Roaming/APPNAME/Logs
+import log from 'electron-log'; //used for logging funcitonality
+autoUpdater.logger = log; //set the logger to the electron-log logger
+autoUpdater.logger.transports.file.level = 'info';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-let autoUpdater = null;
-
-//added to import using esm
-
-import('electron-updater').then(module => {
-  // load module
-  autoUpdater = module.default.autoUpdater // AppUpdater exist, but leads to TypeScript error
-
-  
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.checkForUpdatesAndNotify();
-
-  autoUpdater.on('update-available', () => {
-   // Show loading screen
-      if (!updateScreen) {
-        createUpdateScreen()
-    }
-    // Prepare to apply update
-    setTimeout(() => {
-      autoUpdater.quitAndInstall();
-    }, 6000);
-    });
-    autoUpdater.on('update-available', (event, releaseNotes, releaseName) => {
-    // Notify user or handle the event
-    if (!updateScreen) {
-      createUpdateScreen()
-    }
-    // Prepare to apply update
-    setTimeout(() => {
-      autoUpdater.quitAndInstall();
-    }, 6000);
-  });
-  
-  autoUpdater.on('update-not-available', () => {
-    if (updateScreen) {
-        updateScreen.close();
-    }
-  });
-  
-  autoUpdater.on('error', (err) => {
-    if (updateScreen) {
-        updateScreen.webContents.send(err);
-        updateScreen.close();
-    }
+//autoUpdater event handling
+autoUpdater.on('checking-for-update', () => {
+//can add code here if needed
   });
 
-}).catch(error => {
-  console.error('Failed to load electron-updater:', error);
+autoUpdater.on('update-available', (event, releaseNotes, releaseName) => {
+  // Notify user or handle the event
+  createUpdateScreen()
+
+  // Prepare to apply update
+  setTimeout(() => {
+    autoUpdater.quitAndInstall();
+  }, 6000);
 });
 
+autoUpdater.on('update-not-available', () => {
+//can add code here if needed
+});
 
+autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
+  const flagPath = path.join(app.getPath('userData'), 'updateFlag.txt');
+  fs.writeFileSync(flagPath, 'updated');
+  autoUpdater.quitAndInstall();
+});
 
-//const handleSquirrelEvent = require('./squirrelEvents');
+autoUpdater.on('error', (err) => {
+  if (updateScreen) {
+      updateScreen.webContents.send(err);
+      updateScreen.close();
+  }
+});
 
 // signal if a shutdown of the app was requested
 // this is used to prevent an error window once the R session dies
+//This section is from base code
 let shutdown = false
 
 const rpath = path.join(app.getAppPath(), rPath)
 const libPath = path.join(rpath, 'library')
 const rscript = path.join(rpath, 'bin', 'R')
-
 const shinyAppPath = path.join(app.getAppPath(), 'shiny')
-
 const backgroundColor = '#2c3e50'
 
 // We have to launch a child process for the R shiny webserver
@@ -93,14 +90,6 @@ const backgroundColor = '#2c3e50'
 // At the random port, another webserver is running
 // at any given time there should be 0 or 1 shiny processes
 let rShinyProcess = null
-
-
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
-// KTF - removed for now on 2JAN23
-//if (require('electron-squirrel-startup')) { // eslint-disable-line global-require
-//  app.quit()
-//}
-
 
 // tries to start a webserver
 // attempt - a counter how often it was attempted to start a webserver
@@ -188,14 +177,14 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
 let mainWindow
 let loadingSplashScreen
 let errorSplashScreen
-
+let updateScreen = null;
 //called when ready to launch
 //INPUT: url for shiny app
 //Creates mainwindow
 const createWindow = (shinyUrl) => {
 mainWindow = new BrowserWindow({
-width: 800,
-height: 600,
+width: 1200,
+height: 900,
 show: false,
 webPreferences: {
 preload: path.join(__dirname,'preload.js'),
@@ -203,7 +192,6 @@ nodeIntegration: false,
 contextIsolation: true
 }
 })
-console.log(path.join(__dirname,'preload.js'))
 mainWindow.loadURL(shinyUrl)
 
 // mainWindow.webContents.openDevTools()
@@ -212,7 +200,6 @@ mainWindow.on('closed', () => {
 mainWindow = null
 })
 }
-
 
 const splashScreenOptions = {
 width: 800,
@@ -225,7 +212,6 @@ contextIsolation: true
 }
 }
 
-
 const createSplashScreen = (filename) => {
 let splashScreen = new BrowserWindow(splashScreenOptions)
 splashScreen.loadURL(`file://${__dirname}/${filename}.html`)
@@ -235,7 +221,7 @@ splashScreen = null
 return splashScreen
 }
 
-//I added this
+//KTF added
 const createUpdateScreen = () => {
     let updateScreen = new BrowserWindow({
         width: 400,
@@ -262,6 +248,7 @@ errorSplashScreen = createSplashScreen('failed')
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
+
 // Set a content security policy
   session.defaultSession.webRequest.onHeadersReceived((_, callback) => {
   callback({
@@ -279,16 +266,61 @@ app.on('ready', async () => {
   callback(false)
   })
 
-  //I added this
+  //Added this to account for relaunch after update from GPT
+  const flagPath = path.join(app.getPath('userData'), 'updateFlag.txt');
+
+  if (fs.existsSync(flagPath)) {
+      fs.unlinkSync(flagPath); // Remove the flag file
+      // Logic to restart the app
+      app.relaunch();
+      app.exit();
+  }
+  if (appSettings.firstLaunch) {
+    appSettings.firstLaunch = false;
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(appSettings));
+    
+    // Logic to handle first-time launch after installation
+    // For example, restart the app if needed
+    app.relaunch();
+    app.exit();
+}
+
+//runs autoUpdater
+  autoUpdater.checkForUpdatesAndNotify();
+
+  //This makes a promise in this asynch function that waits for the autoUpdater to finish
+  //designed to make sure that the autoUpdater is done before loading the rest of the program
+  const waitForAutoUpdate = new Promise((resolve, reject) => {
+    autoUpdater.on('update-not-available', resolve);
+    autoUpdater.on('update-available', resolve);
+    autoUpdater.on('error', reject);
+  });
+
+  if (process.defaultApp) {
+    // The app is running from the terminal (not packed)
+    console.log("Launched from terminal, not launching updater");
+    createLoadingSplashScreen();
+
+  } else {
+    //If the app is packed then check for updates and implement promise logic on check for updates. 
+    try {
+      // Wait for the autoUpdater to finish
+        //way to make sure autoupdate is done before loading rest of program
+
+      await waitForAutoUpdate;
+
+      // Call your splash screen and the rest of the initialization
+      createLoadingSplashScreen();
 
 
-  //callas loading splash screen, which calls createsplashscreen with 'loading' as an argument (loading.html is called)
+    } catch (error) {
+      console.error('Error during auto update:', error);
+      // Handle errors or perform fallback actions
+      onErrorStartup();
+    }
+  }
 
-  //I added this
-
-
-  createLoadingSplashScreen()
-
+  //The rest is basically from the Github code template
   //waits for a loading screen
   const emitSplashEvent = async (event, data) => {
   try {
@@ -326,21 +358,14 @@ app.on('ready', async () => {
   loadingSplashScreen.destroy()
   loadingSplashScreen = null
   mainWindow.show()
+  console.log("This is a different log message from the main process");
+
   })
   } catch (e) {
   await emitSplashEvent('failed')
   }
 
-
-  //Updates
-  /*
-
-  */
-
-
 })
-
-
 
 
 // Quit when all windows are closed.
@@ -351,14 +376,16 @@ app.on('window-all-closed', () => {
 // }
 // We overwrite the behaviour for now as it makes things easier
 // remove all events
-shutdown = true
-if (process.platform !== 'darwin') {app.quit();}
 
-// kill the process, just in case
-// usually happens automatically if the main process is killed
-try {
-rShinyProcess.kill()
-} catch (e) {}
+  shutdown = true
+
+  if (process.platform !== 'darwin') {app.quit();}
+
+  // kill the process, just in case
+  // usually happens automatically if the main process is killed
+  try {
+  rShinyProcess.kill()
+  } catch (e) {}
 })
 
 app.on('activate', () => {
@@ -369,10 +396,8 @@ app.on('activate', () => {
   if (mainWindow === null) {
     createWindow()
   }
-  // Deactivated for now
 })
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
 
-//update handling
 

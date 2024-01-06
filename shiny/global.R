@@ -2,6 +2,9 @@
 #### Checking for grade thresholds on startup####
 doc_folder <- "Grade Brief Generator"
 grade_csv_name <- "GradeThresholds.csv"
+
+
+
 check_grade_csv <- function() {
   if (!dir.exists(file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder))) {
     dir.create(file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder))
