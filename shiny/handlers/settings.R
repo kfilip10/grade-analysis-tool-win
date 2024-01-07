@@ -1,23 +1,33 @@
+
+
+#### UI ####
+
 #create a settings page for editing grade bin data
 createSettingsPage <- function() {
   div(
-    h3("Settings"),
+    h2("Settings"),
+    h3("Grade Thresholds"),
     #display grade bin data for dynamic editing
     #h4("Edit Grade Thresholds"),
     actionButton("editGradeBtn", "Edit Grade Thresholds"),
+    actionButton("restoreDefaultGrades", "Restore Default Grade Thresholds"),
+    h3("Canvas API Token"),
+    actionButton("editToken", "Edit API Token"),
   )
   
 }
 
 readGrades <- function() {
-  if (file.exists(grades.path)) {
-    csv <- read.csv(grades.path)
+  if (file.exists(grade_csv_path)) {
+    csv <- read.csv(grade_csv_path)
     csv[2] <- csv[2]*100
     return(csv)
   } else {
-    stop("Cannot find the grades threshold file. Please close and reopen the program and try again.")  # Empty data frame if the file doesn't exist
+stop("Cannot find the grades threshold file. Please close and reopen the program and try again. If this error persists please contact the POC.")  # Empty data frame if the file doesn't exist
   }
 }
+
+#### Server ####
 
 settings_Handler <- function(input, output, session) {
   
@@ -30,7 +40,7 @@ settings_Handler <- function(input, output, session) {
 
   
 
-  
+  #### Edit Grades ####
   observeEvent(input$editGradeBtn, {
     showModal(modalDialog(
       title = "Edit Grade Thresholds",
@@ -38,7 +48,7 @@ settings_Handler <- function(input, output, session) {
     in the course and so it is logged as 60%."),
       DTOutput("settings.grades"),
       footer = tagList(
-        actionButton("saveBtn", "Save Changes"),
+        actionButton("saveBtnGrade", "Save Changes"),
         modalButton("Close")
       )
     ))
@@ -59,7 +69,7 @@ settings_Handler <- function(input, output, session) {
     data(modified_data)
   })
   
-  observeEvent(input$saveBtn, {
+  observeEvent(input$saveBtnGrade, {
     #find the last row of the data frame and set it to F,0
     gr.csv <- data()
     gr.csv[nrow(gr.csv),] <- c("F",0)
@@ -74,17 +84,72 @@ settings_Handler <- function(input, output, session) {
       )
     }
     else{
-      write.csv(gr.csv,grades.path, row.names = FALSE)
+      write.csv(gr.csv,grade_csv_path, row.names = FALSE)
       showModal(modalDialog(
         title = "File Saved",
         "Changes have been saved to the file."
       ))
     }
+    
   })
- 
   
+  #### Edit API Token ####
+  # check if canvas_api_token is null
+  #if(is.null(canvas_api_token)){
+  #  canvas_api_token <- ""
+  #}
+
+  token <- reactiveVal(NULL)# Initialize a reactive value to store the token
+  #default reactiveVal is the token loaded by global
+  #if(is.null(canvas_api_token)){canvas_api_token <- ""}else{
   
+  saveStatus <- reactiveVal("") # Reactive value to store the save status
   
-   
+  observeEvent(input$editToken, {
+    showModal(modalDialog(
+      title = "Edit API Key",
+      tagList(
+        tags$ol(
+          tags$li("Navigate to your profile page on Canvas (left side panel that says 'account'."),
+          tags$li("Click on the 'Settings' link in the sidebar that pops up."),
+          tags$li("Click on the 'New Access Token' button."),
+          tags$li("Enter a purpose for the token (e.g. 'Grade Tool')."),
+          tags$li("If you want the token to expire, enter an expiration date. Otherwise, leave it blank."),
+          tags$li("Click on the 'Generate Token' button."),
+          tags$li("Copy the token and paste it into the box below.")
+        ),
+        tags$p("Follow ",         
+               tags$a(href = "https://community.canvaslms.com/t5/Admin-Guide/How-do-I-manage-API-access-tokens-as-an-admin/ta-p/89", "this link", target = "_blank"),
+                "for additional instructions, if needed"),
+      tags$p("Input your Canvas API token below:"),
+        ),
+      textInput(inputId="token", label=HTML("<b>API Token</b>"), value = readRDS(canvas_api_token_path), width = "100%"),
+      tags$p(textOutput("saveStatus")), # Display the save status
+      footer = tagList(
+      actionButton("saveBtnToken", "Save Changes"),
+      modalButton("Close")
+    )
+    ))
+  })
+  
+  #from GPT, edited to fit this app
+  observeEvent(input$saveBtnToken, {
+    # Attempt to save the file and update the save status
+    tryCatch({
+      saveRDS(input$token, canvas_api_token_path)
+      saveStatus("Token successfully saved.") # Update status on success
+    }, error = function(e) {
+      saveStatus(paste("Error:", e$message)) # Update status on error
+    })
+    
+    # Close the modal dialog after a delay to allow user to read the message
+    invalidateLater(2000) # 2 seconds delay
+    removeModal()
+  })
+  
+  output$saveStatus <- renderText({
+    saveStatus() # Render the save status text
+  })
+
 }
   

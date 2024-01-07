@@ -1,3 +1,6 @@
+
+#### UI ####
+
 createBriefUploadPage <- function() {
   div(
     style=bodystyle,
@@ -21,8 +24,9 @@ createBriefPage <- function(){
     h4("3. Select Parameters"),
     textInput(inputId="courseTitle", label=HTML("<b>Course name:</b>"), value = "PHYS 201"),
     textInput(inputId="eventTitle", label=HTML("<b>Event name:</b>"), value = "WPR "),
-    numericInput("bin_width", "Select a grade bin width for histograms:",
-                 value = 5, min = 4, max = 10), 
+    #removed the bin_width parameter because it wasn't totally needed, left here in case we want it back.
+    #numericInput("bin_width", "Select a grade bin width for histograms:",
+    #             value = 5, min = 4, max = 10), 
     h4("4. Create the Grade Brief"),
     p("Note: You must upload an excel file first"),
     disabled(actionButton("convertBtn", "Create Grade Brief",style = "background-color: #3498db; color: #ffffff;")),
@@ -34,6 +38,7 @@ createBriefPage <- function(){
   )
 }
 
+#### Server ####
 
 
 brief_Handler <- function(input, output, session){
@@ -239,12 +244,11 @@ brief_Handler <- function(input, output, session){
       
       withProgress(message = 'Generating brief', value = 0,min=0,max=1, {
         pdf <- cutSheet()
-        #if (!is.null(df)) {
-        
+
         #Call function below
-        # Call the make_ppt function with the input values
-        
-        bin.width <-input$bin_width #Update this to a user input 
+
+        #bin.width <-input$bin_width #Update this to a user input if we uncomment from UI function
+        bin.width <- 5
         
         
         #ppt <- make_ppt(grades.list$dataframe[[1]], grades.list$dataframe[[2]],course_title, event_title, num_versions, pdf, bin.width)

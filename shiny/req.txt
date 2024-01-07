@@ -19,3 +19,6 @@ stringr
 scales
 openxlsx
 DT
+httr
+tidyr
+shinycssloaders

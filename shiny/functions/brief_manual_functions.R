@@ -1,3 +1,4 @@
+# This file is nearly identical to the brief_canvas functions but uses a backup excel template
 
 #Takes a score, determines which letter grade it receives based on 
 #score breaks passed from a csv

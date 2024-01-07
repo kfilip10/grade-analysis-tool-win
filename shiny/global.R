@@ -1,44 +1,48 @@
-
-#### Checking for grade thresholds on startup####
-doc_folder <- "Grade Brief Generator"
-grade_csv_name <- "GradeThresholds.csv"
-
-
-
-check_grade_csv <- function() {
-  if (!dir.exists(file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder))) {
-    dir.create(file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder))
-    #copy the gradethreshold csv from www folder to the new folder
-    file.copy(from = paste0(getwd(),"/www/",grade_csv_name),
-              to = file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder,grade_csv_name))
-    grades.path <- file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder,grade_csv_name)
-  }
-  
-  # check if the gradethreshold csv exists in the user documents folder, if it doesn't copy it from the www folder
-  # if it does exist then get the path to the file for the program
-  if (!file.exists(file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder,grade_csv_name))) {
-    file.copy(from = paste0(getwd(),"/www/",grade_csv_name),to = file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder,grade_csv_name))
-    grades.path <- file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder,grade_csv_name)
-  } else {
-    
-    grades.path <- file.path(Sys.getenv("USERPROFILE"),"Documents",doc_folder,grade_csv_name)
-  }
-  return(grades.path)
-}
-
-grades.path <- check_grade_csv()
+# The global.R script contains variables used across the app
 
 wd <- getwd() 
 tempDir <- tempdir()
 
-version.palette<-brewer.pal(6,"Dark2")
-#grades.path <- paste0(wd,"/www/GradeThresholds.csv")
-grades.csv <- read.csv(grades.path)
+#### Grade thresholds - Checking for grade thresholds on startup####
+settings_folder <- "Grade Analysis Tool Settings"
+settings_path <- file.path(Sys.getenv("USERPROFILE"),"Documents",settings_folder)
+if (!dir.exists(settings_path)) {
+  dir.create(settings_path)
+}
+grade_csv_name <- "GradeThresholds.csv"
+grade_csv_path <- file.path(Sys.getenv("USERPROFILE"),"Documents",settings_folder,grade_csv_name)
+
+#This function checks if the GradeThresholds.csv is in the user documents folder, if it isn't then it adds it
+
+
+check_grade_csv <- function() {
+  # check if the gradethreshold csv exists in the user documents folder, if it doesn't copy it from the www folder
+  # if it does exist then get the path to the file for the program
+  if (!file.exists(grade_csv_path)) {
+    file.copy(from = file.path(getwd(),"www",grade_csv_name),
+              to = file.path(grade_csv_path))
+    #return(TRUE)
+  } else {
+    #return(TRUE)
+  }
+}
+#Load csv into settings folder and then define the grades and breaks vectors for use in the app
+check_grade_csv()
+grades.csv <- read.csv(grade_csv_path)
 grades <- rev(as.vector(unlist(grades.csv[,1])))
 grades.desc <- as.vector(unlist(grades.csv[,1]))
 breaks <- rev(as.vector(unlist(grades.csv[,2])))
 breaks.desc <- as.vector(unlist(grades.csv[,2]))
 breaks[12] <- Inf #top end of range (A+ in course, exceeding 100%)
+
+
+
+
+#### Themes and Styles ####
+#palette for numerous versions of a test. 
+version.palette<-brewer.pal(7,"Dark2")
+
+#Some css / style variables
 titlestyle <- " font-size: 22px; /* Change font size */
                 background-color: #FFE08D; 
                 color: #000000; 
@@ -52,10 +56,25 @@ bodystyle <- " font-size: 16px; /* Change font size */
                 border: 2px solid #ffffff;/* Add a border */"
 
 
+#### Canvas API token ####
+
+#Canvas API token storage
+#check if there is a token .rds in the settings folder
+#if there is then import it, else set to NULL
+#if it is NULL then that can be used for logic in the UI to prompt the user to enter it in the settings.
+
+
+canvas_api_token_path <- file.path(settings_path,"token.rds")
+api_domain <- "https://westpoint.instructure.com"
+
+
+#saveRDS(canvas_api_token, canvas_api_token_path)
 
 
 
-
+#### Global Functions ####
+#function to source all subfiles
+#folder_path <- file.path(getwd(),"functions","canvas api")
 sourceAllFilesInFolder <- function(folder_path) {
   file_list <- list.files(folder_path, pattern = "\\.R$", full.names = TRUE)
   for (file in file_list) {
@@ -63,16 +82,22 @@ sourceAllFilesInFolder <- function(folder_path) {
   }
 }
 
+#function to show an error modal
 showErrorModal <- function(errorMsg) {
   showModal(
     modalDialog(
-      title = "Error: Check your data follows the provided format and please Contact the POC.",
+      title = "Error Encountered",
       errorMsg,
       footer = modalButton("Close")
     )
   )
 }
 
+
+#### Letter grade function ####
+#function to assign a grade based on a percent score
+#uses the breaks and grades vectors from the GradeThresholds.csv file
+#function edited from a StackOverflow post that I can't seem to find the link to anymore
 letter_grade <- function(score, breaks, grades) {
   n <- length(breaks)
   for (i in 1:(n-1)) {
@@ -84,6 +109,10 @@ letter_grade <- function(score, breaks, grades) {
   grade
 }
 
+#### Install Packages ####
+#Installs package dependencies based on list in req.txt
+#parenthesis are used to make an anonymous function and immediately call it
+#from: https://github.com/derryleng/Shiny_Desktop_App
 (function(req_file, install = T, update = F, silent = F) {
   
   # Read text file containing required packages
@@ -107,10 +136,6 @@ letter_grade <- function(score, breaks, grades) {
     }
   }
   
-  # Additional stuff here
-  # if (!webshot::is_phantomjs_installed()) {
-  #   webshot::install_phantomjs()
-  # }
   
   # Load packages
   if (silent) {
@@ -120,4 +145,4 @@ letter_grade <- function(score, breaks, grades) {
   }
   
   
-})(file.path(getwd(),"req.txt"), silent = F)
+})(file.path(getwd(),"req.txt"), silent = F)#This line calls the function with those arguments

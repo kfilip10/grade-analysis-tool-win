@@ -1,7 +1,40 @@
 
 
+#### UI ####
+createManualPage <- function() {
+  div(
+    style=bodystyle,
+    h3("Manual backup of the PANE Grade Report Generator!"),
+    tags$p("This tab is for a non-canvas related grade upload. 
+               It uses a standalone excel template to still generate the brief in the event of no access to Canvas, a bug in the canvas tool,
+               or just preference by the user."),
+    h4("Instructions:"),
+    tags$ol(
+      tags$li("Download the template below"),
+      downloadButton("download_template_manual", "Download Template Format in Excel"),
+      tags$li(textInput(inputId="courseTitleManual", label=HTML("<b>Type the course name</b>"), value = "PHYS ")),
+      tags$li(textInput(inputId="eventTitleManual", label=HTML("<b>Type the event name</b>"), value = "WPR ")),
+      fileInput("excelFileManual", HTML("<b>Upload the Excel with the WPR Grades</b>"), accept = c(".xlsx")),
+      fileInput("cutSheetManual",HTML("<b>Upload the PDF Cut Sheet </b> <br>
+                                (Leave blank if no cut sheets are desired in final brief) "), accept = c(".pdf")),
+      #tags$li(selectInput("sortValueManual", label = "Select which method of sorting questions:",
+      #                    choices = c("Group By Concept", "Display in Question Order"),
+      #                    selected = "Display in Question Order")),
+      tags$li(numericInput("bin_width_manual", "Select a grade bin width for histograms:", 
+                           value = 5, min = 0, max = 10)),
+      tags$li(disabled(actionButton("convertBtnManual", "Create Grade Brief",style = "background-color: #3498db; color: #ffffff;")),
+      ),
+      HTML("<p></p><br><p></p>"),
+      tags$li(disabled(downloadButton("pptDownloadManual", "Download Grade Brief (PPT)",style = "background-color: #3498db; color: #ffffff;"))),
+      tags$li(disabled(downloadButton("downloadCanvasEntry", "Download data for canvas Entry (.xlsx)",style = "background-color: #3498db; color: #ffffff;")))
+    ),
+  )
+  
+}
 
-briefManual_Handler <- function(input, output, session){
+#### Server ####
+
+brief_Manual_Handler <- function(input, output, session){
 
 #### Manual Backup ####
 # If manual backup is true then run the normal ppt.R function 

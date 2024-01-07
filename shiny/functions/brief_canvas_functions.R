@@ -1,6 +1,9 @@
+# This file contains the logic to import the grade data, parse it, and create the brief
+
 #takes a dataframe from a single sheet of the grade report generator excel template
 #takes a version number, the grade breaks, grades, and a version color
-#returns a list of elements pertaining to that version of the exam
+#returns a list of dataframe elements pertaining for that version of the exam
+
 parse_version <- function(df,versionNum,vers.color) {
   #takes the dataframe
 
@@ -100,22 +103,15 @@ parse_version <- function(df,versionNum,vers.color) {
   version[[1]]  <-  df.version
   version[[2]]  <-  df.vers.header
   version[[3]]  <-  course.roster
-  
-  #version[[3]] = concepts
-  #version[[4]] = cutpages
-  #version[[5]] = questionPoints
-  #version[[6]] = vers.color
   return(version)
 }
 
 
 import_WPR_excel <- function(list.df,numberVersions){
-  wd <- getwd() 
   #This gets the df list element for each version and pulls the required
   #data from the header and reformats the data to be clean
   gb <- list()
-  #insert a 30 second pause for debugging
-  #
+  
   for (i in 1:numberVersions){
     list.el <- parse_version(list.df[[i]], i,version.palette[[i]])
     gb[[i]] <- list.el
@@ -126,7 +122,6 @@ import_WPR_excel <- function(list.df,numberVersions){
   # big summary table with cadets
   # version header info
   # total cadets list
-  
   
   
   #combines for summary df and question df
@@ -222,8 +217,8 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
   duplicate.entries <- l[[3]]
   no.entries <- l[[4]]
   
-  temp.dir <- str_c(tempdir(),"\\r\\")
-  if(!dir.exists(temp.dir)){dir.create(temp.dir)}
+  temp.dir.r <- file.path(tempDir,"r")
+  if(!dir.exists(temp.dir.r)){dir.create(temp.dir.r)}
 
   numberVersions <- length(unique(df.total$version))
   #Palette for versions
@@ -668,7 +663,7 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
     
     #### Bring in cut sheet ####
     if(!is.null(cutSheet)){
-      img.path = paste0(temp.dir,"image",version.num,cut.page,".png")
+      img.path = paste0(tempDir,"image",version.num,cut.page,".png")
       cutSheet[cut.page] %>% image_write(., img.path, format = "png")
       ppt <- ph_with(ppt, value = external_img(img.path), location = ph_location_label(ph_label = "cut sheet"))
       

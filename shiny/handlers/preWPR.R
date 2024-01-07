@@ -1,3 +1,7 @@
+
+
+#### UI ####
+
 createPreWPRPage <- function() {
   fluidRow(
     column(width = 6,
@@ -5,8 +9,6 @@ createPreWPRPage <- function() {
            h3("Grading Template Generator"),
            p("This side will generate the grading template based on the values in the 
            right column and the number of versions of your exam."),
-           #numericInput("versionsTemplate", "How many versions will your test have?", 
-           #            value = 1, min = 1, max = 10,width="400px"),
            tags$p("Upload all canvas gradebooks from before the WPR/TEE. For decentralized canvas courses (PHYS201/202) you will need to select all sections at the same time."),
            fileInput("CanvasGradebook", HTML("<b>Upload all pre-WPR/TEE canvas gradebooks:</b>"), accept = c(".csv"), multiple = TRUE),
            disabled(actionButton("make_template_btn", "Make/update Grading Template")),
@@ -23,7 +25,10 @@ createPreWPRPage <- function() {
            If the gradebook column names change you may need to update these values."),
            tags$p(HTML("<b> NOTE:</b> Default values only need to be changed if the canvas gradebook format has changed.")
            ),
-           textInput(inputId="studentStr", 
+           #The following are reactive containers to store the values from the UI
+           #These correspond to column names in the csv downloaded from Canvas
+           #If API access is implemented these would be unnecessary
+           textInput(inputId="studentStr",
                      label=HTML("Gradebook column name for student name:"), width="400px",value = "Student"),
            textInput(inputId="studentIDStr", 
                      label=HTML("Gradebook column name for student ID number:"), width="400px",value = "ID"),
@@ -39,11 +44,12 @@ createPreWPRPage <- function() {
   )
 }
 
+#### Server ####
 
 preWPR_Handler <- function(input, output, session) {
   
-#### Pre-WPR Template ####
 #### Combining Canvas Gradebook - Prep page#### 
+  # reactive containers to store the values from the UI
 studentStr <- reactive({
   input$studentStr
 })
@@ -62,35 +68,38 @@ sectionstr <- reactive({
 canvasrowNumStudents <- reactive({
   input$canvasrowNumStudents
 })
-versionsTemplate <- reactive({
-  input$versionsTemplate
-})
 
-
+# Waits for the user to upload the canvas gradebook
 observeEvent(input$CanvasGradebook, { 
-  
+  # Then enables the ability to make the grading template
   enable("make_template_btn")
   
 })
+#Makes a reactive container to store the path to the template, NULL by default
 templatePath <- reactiveVal(NULL)
+#Makes a reactive container to store the path to the combined canvas gradebook, NULL by default
 combined_canvas_Path <- reactiveVal(NULL)
 
-#tempDir <- reactiveVal(tempdir())
-
+# Makes the grading template based on the canvas gradebook
 observeEvent(input$make_template_btn, {
-  req(input$CanvasGradebook)
-  files <- input$CanvasGradebook
+  req(input$CanvasGradebook) #requries a gradebook, this will become something with the API next
+  files <- input$CanvasGradebook #files is a list of the files uploaded, takes multiple csv files for decentralized courses
   if (is.null(files))
     return(NULL)
   
-  data <- lapply(files$datapath, import_canvas,student.str=studentStr(),
+  #applies 'import_canvas' function to each file in the list. Everything after import_canvas are the arguments to the function
+  data <- lapply(files$datapath, import_canvas,
+                 student.str=studentStr(),
                  studentID.str=studentIDStr(),
                  section.str=sectionstr(),
                  currPoints.str=currPointsStr(), 
                  currScore.str=currScoreStr(),
                  rowStudents= canvasrowNumStudents())
+  #after lapply data is a list of dataframes
+  #do.call applies rbind to each dataframe in the list, compiling them into one dataframe
   gb <- do.call(rbind, data)
   
+  #runs the prepare_template function 
   template.list <- prepare_template(gb, studentStr(), 
                                     studentIDStr(),
                                     sectionstr(), 
