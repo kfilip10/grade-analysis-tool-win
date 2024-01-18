@@ -62,10 +62,15 @@ ui <- fluidPage(
     tabPanel("Home",icon = icon("home"),  createHomePage() #icons from: https://www.w3schools.com/bootstrap/bootstrap_ref_comp_glyphs.asp
     ), 
     #Prep and Canvas Data
-    tabPanel("Prep and Canvas Data",
+    tabPanel("Canvas Access",
              value = "prep_panel",
-             uiOutput("dynamicUI"),
-             icon = icon("cloud",lib="glyphicon")
+             icon = icon("cloud",lib="glyphicon"),
+             tabsetPanel(
+               tabPanel("Load Canvas Data", uiOutput("dynamicUI")),#this calls     createCanvasPrepPage() dynamically
+               tabPanel("Graph Viewer", course_graph_viewer()),
+               tabPanel("Table Viewer", course_table_viewer())
+             )
+             
     ),
     #Makes the pre-WPR data prep page. createPreWPRPage() is in the handlers folder
     tabPanel("Pre-WPR Prep",icon = icon("list-alt",lib="glyphicon"),createPreWPRPage()

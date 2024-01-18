@@ -1,5 +1,5 @@
 #### DEV / DEBUG BLOCK ####
-#### Things I run while debugging ####
+#### Things I run while debugging NOT USED IN THE MAIN APP####
 
 
 cutSheet=NULL
@@ -234,3 +234,17 @@ grades.csv[[2]] <- as.numeric(grades.csv[[2]])*100
 
 min(grades.csv[[2]])
 max(grades.csv[[2]])
+
+
+#### API ####
+settings_path <- file.path(Sys.getenv("USERPROFILE"),"Documents",settings_folder)
+canvas_api_token_path <- file.path(settings_path,"token.rds")
+
+canvas_api_token <- "15453~eJc7obNn7wertD2Z6jpEcLzMvn1n1xVPp2sBQfmM3SYGk2X7PY48hUMsbBgfxbHW"
+saveRDS(canvas_api_token, canvas_api_token_path)
+domain = "https://westpoint.instructure.com"
+
+set_canvas_token(canvas_api_token)
+set_canvas_domain(domain)
+
+g <- get_course_list() %>% select(id)
