@@ -18,21 +18,12 @@ req <- scan(file.path(getwd(), "req.txt"), character(), quiet = T)#This was how 
 #lapply - apply function to list (it applies the library function to the list of packages in req, which is the req.txt file)
 # character.only = T - only use the character strings in the list, not the other stuff
 invisible(lapply(req, library, character.only = T))
-
-#### Custom CSS example, .sidebar isn't used but container for use later#### 
-customCSS <- function() {
-  tags$head(
-    tags$style(
-      HTML(
-        "
-        /* Custom CSS to change font size of sidebar */
-        .sidebar {
-          font-size: 18px; /* Change font size as needed */
-        }
-        "
-      )
-    )
-  )
+checkInternetAccess <- function() {
+  # Ping a reliable server (e.g., Google's DNS server)
+  pingResult <- ping("8.8.8.8", count = 1, timeout = 1)
+  
+  # Check if the ping was successful
+  return(!is.na(pingResult))
 }
 
 #### Load Global Variables and some setup ####
@@ -59,22 +50,27 @@ ui <- fluidPage(
       "Grade Report Generator"
     ),
     #Makes the home page. createHomePage() is in the handlers folder
-    tabPanel("Home",icon = icon("home"),  createHomePage() #icons from: https://www.w3schools.com/bootstrap/bootstrap_ref_comp_glyphs.asp
-    ), 
+    tabPanel("Home",icon = icon("home"),  createHomePage(),
+             textOutput("connectivityStatus")
+             #icons from: https://www.w3schools.com/bootstrap/bootstrap_ref_comp_glyphs.asp
+    ),
     #Prep and Canvas Data
     tabPanel("Canvas Access",
              value = "prep_panel",
              icon = icon("cloud",lib="glyphicon"),
              tabsetPanel(
-               tabPanel("Load Canvas Data", uiOutput("dynamicUI")),#this calls     createCanvasPrepPage() dynamically
-               tabPanel("Graph Viewer", course_graph_viewer()),
-               tabPanel("Table Viewer", course_table_viewer())
+               
+               tabPanel("Canvas Gradebook and Template", withSpinner(uiOutput("Canvas_data_UI"))),#this calls     createCanvasPrepPage() dynamically
+               tabPanel("Assignment Group Stats", canvas_assignment_viewer()),
+               tabPanel("Course grade Stats", canvas_gradebook_viewer()),
+               tabPanel("Canvas Grade uploads", withSpinner(uiOutput("Upload_Grades_UI"))),#withSpinner(
+               
              )
              
     ),
     #Makes the pre-WPR data prep page. createPreWPRPage() is in the handlers folder
-    tabPanel("Pre-WPR Prep",icon = icon("list-alt",lib="glyphicon"),createPreWPRPage()
-    ),
+    #Commented out the Pre-WPR Prep since canvas is now integrated
+    #tabPanel("Pre-WPR Prep",icon = icon("list-alt",lib="glyphicon"),createPreWPRPage()),
     #Makes the WPR Analysis and Brief page. This page within the navbar has multiple tabs (tabsetPanel handles those)
     tabPanel("WPR Analysis and Brief", icon = icon("stats",lib="glyphicon"), # Using a Shiny icon for comparison
       tabsetPanel(
@@ -103,7 +99,8 @@ ui <- fluidPage(
     #tabPanel("Post Brief OML",icon=icon("list"),createOMLPage()),
     
     #Brief without Canvas is buggy as of 6JAN. Need to make it more robust
-    tabPanel("Brief without Canvas",icon=icon("warning-sign",lib="glyphicon"),createManualPage()),
+    #Commented out the Brief without Canvas since canvas is now integrated
+    #tabPanel("Brief without Canvas",icon=icon("warning-sign",lib="glyphicon"),createManualPage()),
     #Settings page which will write to a folder defined in global.R
     tabPanel("Settings",icon=icon("cog"),createSettingsPage()
     ),
@@ -124,24 +121,43 @@ ui <- fluidPage(
 
 # Server
 server <- function(input, output, session) {
+  output$connectivityStatus <- renderText({
+    if (checkInternetAccess()) {
+      # Internet access is available
+      "Note: Internet access is available"
+    } else {
+      # Internet access is not available
+      "Note: Internet access is not available"
+    }
+  })
+
   
-  
-  output$dynamicUI <- renderUI({
+  output$Canvas_data_UI <- renderUI({
   if (input$navbarID == "prep_panel") {
     createCanvasPrepPage()
     
   }
   })
+  
+  output$Upload_Grades_UI <- renderUI({
+    if (input$navbarID == "prep_panel") {
+      canvas_grade_upload()
+      
+    }
+  })
+  
   # Check if the Canvas API token exists
   canvas_api_token <- reactiveVal()
-  
+
   observeEvent(input$navbarID, {
     if (input$navbarID == "prep_panel") {
       # Code to update canvas_api_token
       if (file.exists(canvas_api_token_path)) {
         canvas_api_token(readRDS(canvas_api_token_path))
+
       } else {
         canvas_api_token(NULL)
+
       }
     }
   })
@@ -149,7 +165,7 @@ server <- function(input, output, session) {
   canvasPrep_Handler(input, output, session, canvas_api_token)
   
   # Pre WPR Prep logic and display
-  preWPR_Handler(input, output, session)
+  #preWPR_Handler(input, output, session)
     
   # Settings logic and display
   settings_Handler(input, output, session)
@@ -158,7 +174,7 @@ server <- function(input, output, session) {
   brief_Handler(input, output, session)
   
   #Manual brief logic and display
-  brief_Manual_Handler(input, output, session)
+  #brief_Manual_Handler(input, output, session)
   
   #### Task Kill ####
   session$onSessionEnded(function() {

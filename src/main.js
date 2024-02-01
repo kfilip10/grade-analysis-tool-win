@@ -249,11 +249,15 @@ errorSplashScreen = createSplashScreen('failed')
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
 
+
 // Set a content security policy
+//Commented out for API call
+
   session.defaultSession.webRequest.onHeadersReceived((_, callback) => {
   callback({
   responseHeaders: `
-  default-src 'none';
+  "default-src 'self'; 
+  connect-src 'self' https://westpoint.instructure.com/;
   script-src 'self';
   img-src 'self' data:;
   style-src 'self';

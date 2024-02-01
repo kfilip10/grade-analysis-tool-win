@@ -87,7 +87,9 @@ brief_Handler <- function(input, output, session){
       return(NULL)
     
     sheets <- excel_sheets(inFile)
-    checkboxGroupInput("WPR_sheets", "WPR Grade data:", choices = sheets,selected=sheets)
+    checkboxGroupInput("WPR_sheets", "WPR Grade data:", 
+                       choices = sheets,
+                       selected=sheets)
   })
   
   
@@ -138,6 +140,7 @@ brief_Handler <- function(input, output, session){
       showErrorModal(paste("Error:", e$message))
     })
     
+    #deprecated code to group questions in the brief by concept (didn't work well)
     output$quesConcCompare <- renderText({
       numquestions <- df.list[[2]] %>% group_by(version) %>% summarise(questions = n_distinct(question))
       

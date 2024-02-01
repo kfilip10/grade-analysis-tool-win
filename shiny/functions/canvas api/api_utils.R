@@ -37,7 +37,7 @@ set_canvas_domain <- function(domain) {
 check_token <- function() {
   token <- keyring::key_get("rcanvas_CANVAS_API_TOKEN")
   if (identical(token, "")) {
-    stop("Please set your Canvas API token with set_canvas_token.",
+    stop("Check your token is in settings and it has not expired.",
          call. = FALSE)
   }
   token

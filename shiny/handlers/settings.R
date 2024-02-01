@@ -6,13 +6,14 @@
 createSettingsPage <- function() {
   div(
     h2("Settings"),
+    h3("Canvas API Token"),
+    actionButton("editToken", "Edit API Token"),
     h3("Grade Thresholds"),
     #display grade bin data for dynamic editing
     #h4("Edit Grade Thresholds"),
+    p("Note: You will need to restart the app for grade changes to take effect."),
     actionButton("editGradeBtn", "Edit Grade Thresholds"),
     actionButton("restoreDefaultGrades", "Restore Default Grade Thresholds"),
-    h3("Canvas API Token"),
-    actionButton("editToken", "Edit API Token"),
   )
   
 }
@@ -99,7 +100,14 @@ settings_Handler <- function(input, output, session) {
   #  canvas_api_token <- ""
   #}
 
-  token <- reactiveVal(NULL)# Initialize a reactive value to store the token
+  token <- reactiveVal(NULL)  
+    #if(is.null(readRDS(canvas_api_token_path))){
+    #token("")
+#  }else{
+#    token(readRDS(canvas_api_token_path))
+ # })# Initialize a reactive value to store the token
+  #check if readRDS(canvas_api_token_path) is null
+
   #default reactiveVal is the token loaded by global
   #if(is.null(canvas_api_token)){canvas_api_token <- ""}else{
   
@@ -123,7 +131,7 @@ settings_Handler <- function(input, output, session) {
                 "for additional instructions, if needed"),
       tags$p("Input your Canvas API token below:"),
         ),
-      textInput(inputId="token", label=HTML("<b>API Token</b>"), value = readRDS(canvas_api_token_path), width = "100%"),
+      textInput(inputId="token", label=HTML("<b>API Token</b>"), value = , width = "100%"),
       tags$p(textOutput("saveStatus")), # Display the save status
       footer = tagList(
       actionButton("saveBtnToken", "Save Changes"),

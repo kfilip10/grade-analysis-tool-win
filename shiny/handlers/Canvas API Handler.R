@@ -1,44 +1,89 @@
 # 
 # 
-# #### UI for Canvas Page####
+# #### UI and server logic for Canvas API Integration####
 # 
 # The first functions below are called as tabset panels in app.R
 #this is the first tabset, it runs on loading the tab.
+
+
 createCanvasPrepPage <- function() {
   tabPanel("Canvas Data",
            fluidRow(
              column(width = 10,
                     h3("Canvas Data and Grading Template Generator"),
                     p("This page allows you to access your Canvas Course Data from the API and generate the grading template"),
-                    uiOutput("tokenStatus"),  # Placeholder for token status
-                    withSpinner(uiOutput("connectionStatus")),  # Placeholder for connection status
+                    uiOutput("tokenStatus"),  # withSpinner(Placeholder for token status
+                    uiOutput("connectionStatus"),  #withSpinner( Placeholder for connection status
              )
            ))
 }
-course_graph_viewer <- function() {
+canvas_assignment_viewer <- function() {
   fluidPage(
-    titlePanel("Gradebook Plot with Filtering"),
+    titlePanel("Assignment Group Data with Filtering"),
     sidebarLayout(
       sidebarPanel(
         selectInput("group_id", "Assignment Group ID",
                     choices = NULL)
       ),
       mainPanel(
-        plotOutput("plot")
+        plotOutput("plotByAssignmentGroup")
+      )
+    ),
+    fluidRow(
+      column(width = 10,
+             h3("This will be a tabular viewer of assignment level info"),
+             DTOutput("course_table")
       )
     )
   )
 }
 
-course_table_viewer<- function() {
-  
-  fluidRow(
-    column(width = 10,
-           h3("This will be a tabular viewer of assignment level info"),
-           DTOutput("course_table")
-    )
-  )
+#plot and table viewer similar to above for overall grades in the course by section
+canvas_gradebook_viewer<- function() {
+  #Build in gradbook viewer plot and table.
+
 }
+
+
+# function to take the template excel file and upload grades to canvas
+canvas_grade_upload <- function (){
+  # Instructions
+  fluidPage(
+    titlePanel("Bulk Assignment Grade Upload"),
+      mainPanel(
+        p("This page allows you to upload your Canvas Grade Data from the grading template"),
+        #uiOutput("tokenStatus"),  # Placeholder for token status
+        h3("Instructions"),
+        #browser(),
+        tags$ol(
+          tags$li("Upload the template file with your grade data. The program will automatically check for duplicate entries and other errors."),
+          tags$li("If errors are present fix any duplicate entries or errors and reupload."),
+          tags$li("If no errors are present click the 'Upload Grade Data' button to push the grades to Canvas"),
+          tags$li("To check if the upload was succesful return to the Canvas Data tab and download a gradebook using that assignment."),
+        ),
+        # upload
+        h4("Upload the template file with your grade data:"),
+        fileInput("graded_template", HTML("<b>WPR Grade Data (.xlsx)</b>"), accept = c(".xlsx")),
+        uiOutput("graded_template_checkbox_UI"),
+        #action button to load the data from the template
+        actionButton("load_template_data", "Load Data from Template"),
+        # check for duplicate entries (indicate these will not be uploaded unless fixed and re-uploaded)
+        h4("Duplicate Entries:"),
+        p("The following duplicate entries (one cadet with grades in multiple versions most likely) were found that you should investigate."),
+        tableOutput("duplicateTableUploads"),
+        h4("Missing Entries:"),
+        p("The following Cadets did not have an entry in the uploaded data or had incomplete grade data and will not be uploaded to Canvas unless corrected in excel."),
+        tableOutput("noEntryTableUploads"),
+        # call function to upload the file
+        h2("Upload grades to canvas:"),
+        p("The following Cadets did not have an entry in the uploaded data or had incomplete grade data and will not be uploaded to Canvas unless corrected in excel."),
+        disabled(actionButton("upload_grades_canvas", "Upload Grade Data"))
+        # display results
+      )
+    )
+
+}
+
 
 canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
   
@@ -59,6 +104,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     if (is.null(canvas_api_token())) {
       tags$p(style = "color: red;", "You do not have a Canvas API token set. Please go to the settings page to set up your Canvas Token to be able to use this page.")
     } else {
+      tags$p("Have Token")
       #I could put text here if it was needed but I don't think it is
       #tags$p("Your Canvas API token was found in settings.")
     }
@@ -85,22 +131,39 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
         tags$p(style = "color: white;font-weight: bold;background-color: #6fbd7a;
                               text-align: center; border-radius: 10px; padding: 5px;",
                "API Connection Successful!"),
+        h3("Instructions"),
+        tags$ol(
+          tags$li("First Select the courses you want to collect data from."),
+          tags$li("NOTE: The courses you select must have assignments with the same name (it is designed to work with Canvas blueprint)"),
+          tags$li("Click the 'show/hide' Assignment Listing to generate list of assignments to choose from"),
+          tags$li("Click the 'automatically load data from canvas' button"),
+          tags$li("Now you are able to view graph data (other tabs), download a grading template, and download a gradebook."),
+        ),
+        tags$hr(),
         #show the course selection button
+        h3("Select course data"),
         h4("1. Select the Courses to collect data:"),
         #show the button to show/hide the course selection
         actionButton(inputId = "courseShowHide",label = "Show/Hide Course Selection"),
         div(id="course_checkbox_div", style = "display: none;",
             uiOutput("courseCheckboxUI")),
-        h4("2. Select the Assignment data you want:"),
+        h4("2. Select the Assignment data from the list:"),
         tags$p("Generating the assignment listing will take approximately 2 seconds per course selected."),
-        disabled(actionButton(inputId = "assignmentShowHide",label = "Show/Hide Gradebook Download")),
+        disabled(actionButton(inputId = "assignmentShowHide",label = "Show/Hide Assignment List")),
         div(id="assignment_div", style = "display: none;",
             uiOutput("assignmentUI")),
         h4("3. Load the assignment data for the selected courses:"),
-        disabled(actionButton(inputId = "load_canvas_data",label = "Automatically Load Data from Canvas")),
-        h4("4. Select what you want to do from the available options or use the graph tabs on this page."),
+        disabled(actionButton(inputId = "load_canvas_data",label = "Automatically Load Data from Canvas",
+                              style="color: white; background-color: green")),
+        tags$hr(),
+        h3("Download Options"),
+        h4("4a. Download a gradebook of the checkbox assignments above:"),
+        disabled(downloadButton("download_gradebook_canvas", "Download Canvas Gradebook")),
+        h4("4b. Download a grading template:"),
+        h5("Select which assignment to generate a grading template for:"),
+        uiOutput("templateAssignmentUI"),
         disabled(downloadButton("download_template_canvas", "Download WPR Grading Template")),
-        disabled(downloadButton("download_gradebook_canvas", "Download Canvas Gradebook"))
+
       )
     }
   })
@@ -121,6 +184,8 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       NULL
     }
   })
+  
+
   
   #assignment group lookup table
   assign.group.comb <- reactive({
@@ -237,6 +302,8 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       roster.course <- roster_course_df()
       roster.course <- roster.course %>% mutate(`Max Points`=grades.unposted_current_points/grades.unposted_current_score*100)
       names(roster.course)[5:7] <- c("Score","Grade","Points")
+      roster.course <-  roster.course %>% rename(section = name)
+      
       roster_course_df(roster.course)
 
       #get the assignment list reactive value
@@ -273,39 +340,91 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
         select(user_id,course_id,name,score,points_possible,assignment_group_id)%>%
         mutate(percent = score/points_possible)
 
-      #rename name to assignment_name
+            #rename name to assignment_name
       gb.comb.parse <-  gb.comb.parse %>% rename(assignment_name = name)
       #reactive value that may be useful in the plotting function
       # find the name in assign.group.comb and add it to the gb.comb.parse by assign_group_id
-      gb.comb.parse <- gb.comb.parse %>% left_join(assign.group.comb(), by = "assignment_group_id")
+      gb.comb.parse <- gb.comb.parse %>% left_join(assign.group.comb()%>%
+                                                     select(assignment_group_id,assignment_group_name), by = "assignment_group_id")
 
+      roster.course <-  roster.course %>% mutate(section = substr(section, nchar(section)-7, nchar(section)))
+      
+      roster.course <-roster.course %>% mutate(section = substr(section, nchar(section)-7, nchar(section)))
+      roster.course <-roster.course %>% mutate(section = substr(section, 1, nchar(section)-1))
+      roster.course <-roster.course %>% mutate(course_name = str_c(instructor,section,sep = "-"))
+      
+      
+      course.instructor.df <- as.data.frame(roster.course %>% group_by(course_id) %>% 
+                                              select(instructor,section,course_name) %>% distinct())
+      
+      gb.comb.parse <- gb.comb.parse %>% left_join(course.instructor.df, by = "course_id")
+      
+      
+      
       #I may need to get the assignment group name
+      #I have the assignmentgroup name
+      #column names for this:
+      #user_id int
+      #course_id int
+      #assignment_name end
+      #score num
+      #points_possible num
+      #percent num
+      #assignment_group_id int 
+      #assignment_group_name chr
+      
+      #I could add the instructor name to this, or leave anonymized 
       course_gradebook(gb.comb.parse)
+      updateSelectInput(session, "select_template_assignment",
+                        choices = course_gradebook()$assignment_name)
+      
+      enable("download_template_canvas")
+      enable("download_gradebook_canvas")
 
-      #Pivot wider to get assignment id as columns names
-      gb.comb.parse <- gb.comb.parse %>% pivot_wider(names_from = assignment_name,
-                                                     values_from = c(score,points_possible,percent),
-                                                     names_glue = "{assignment_name}_{.value}")
-
-      #now join the user_id and roster.course to get the student names
-      gb.xl <- roster.course  %>% left_join(gb.comb.parse, by = "user_id")
-
-      #download gb.xl as an xlsx file
-      #write.xlsx(gb.xl, file)
     })
   
   
-  #### Download Buttons ####
+  #### Download Excel Template ####
+  
+  output$templateAssignmentUI <- renderUI({
+    selectInput("select_template_assignment",
+                label = "Choose an assignment for your template:",
+                choices = NULL,
+                selected = NULL)
+    })
+
+  #reactive for the select template assignment list after course_list_df() is not null
+  observe({
+    if (!is.null(course_list_df())) {
+
+    }
+  })
+  
+  #list the assignments that are available to make a template for
+  observeEvent(input$select_template_assignment, {
+    req(input$select_template_assignment)
+  })
+  
   
   #download the WPR grading template, to be used to process the WPR brief
   output$download_template_canvas <- downloadHandler(
     filename = function() {
-      "gradebook.xlsx"
+      "Grading Template.xlsx"
     },
     content = function(file) {
+      #Pivot wider to get assignment id as columns names
+      req(roster_course_df())
+      req(assignment_list_df())
       
+      list.template <- excel_template_from_canvas(roster_course_df(), 
+                                 assignment_list_df(), 
+                                 input$select_template_assignment)
+      
+      
+      file.copy(list.template[[1]], file)
       
     })
+  #### Download Canvas Gradebook ####
   
   #download the canvas data in a familiar gradebook excel format
    output$download_gradebook_canvas <- downloadHandler(
@@ -333,33 +452,33 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     })
 
 
-      
-      
   #### tab for data visualization ####
-  
-  
   filteredPlotData <- reactive({
-    course_gradebook() %>% group_by(course_id, assignment_group_id) %>%
+    course_gradebook() %>% group_by(course_name, assignment_group_name) %>%
       summarise(n=n(),mean=mean(percent,na.rm=TRUE),sd=sd(percent,na.rm=TRUE))
   })
   
-  
+  #need to add the select input to the data visualization
   observe({
     updateSelectInput(session, "group_id",
-                      choices = unique(course_gradebook()$assignment_group_id))
+                      choices = unique(course_gradebook()$assignment_group_name))
   })
   
-  output$plot <- renderPlot({
-    ggplot(filteredPlotData(), aes(x = course_id, y = mean,fill=assignment_group_id)) +
+  output$plotByAssignmentGroup <- renderPlot({
+    ggplot(filteredPlotData(), aes(x = course_name, y = mean,fill=assignment_group_name)) +
       geom_bar(stat = "identity") +
       theme_minimal()
   })
   
   
+  #Also can do a plot of roster.course
+  # I have the section and max points so that CD can check who hasn't posted to canvas
+  
   #### tab for table viz####
   # AS OF 14JAN basic functionality works below
   # the below shows the course table filtered to just id and name
   filteredCourseData <- reactive({
+    
     if (length(selected_courses) > 0) {
       course_list_df() %>% filter(name %in% selected_courses()) %>%
         select(id,name)
@@ -375,11 +494,121 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
   })
   
   output$course_table <- renderDT({
-    filteredCourseData()
+    filteredPlotData()
   }, options = list(pageLength = 5))
   
   
+  #### tab for uploading grades to canvas ####
+  #When an excel is uploaded
+  observeEvent(input$graded_template, { 
+    # Then enables the ability to make the grading template
+    #df <- read_excel(input$graded_template$datapath)
+    enable("upload_grades_canvas")
+  })
+  
+  
+  #make a checkbox of sheets in the excel file
+  output$graded_template_checkbox_UI <- renderUI({
+    req(input$graded_template$datapath)
+    sheets <- excel_sheets(input$graded_template$datapath)
+
+    checkboxGroupInput("graded_template_checkbox", 
+                  "Select Sheets from Excel with Grade Data",  
+                  choices = sheets,
+                  selected=sheets)
+  })
+  
+  canvas.upload.df <- reactiveValues(dataframes=list())
+  
+  #button to combine data and check for duplicate entries before giving upload option
+ observeEvent(input$load_template_data,{
+    req(input$graded_template$datapath)
+
+   sheets <-  input$graded_template_checkbox #sheets list from the checkboxes
+   
+   # Store the number of sheets in a reactive variable for further use
+   #load df.total and df.g here
+   # df.grades is list of two dataframes (df.total and df.questions)
+   tryCatch({
+     
+     list.df <- list()
+     versions <- sheets
+     versions <- tolower(versions)
+     for(n in 1:length(versions)){
+       sheetN <- match(1,str_detect(versions,as.character(n)))
+       if(is.na(sheetN)){
+         showModal(modalDialog(
+           title = "Important message",
+           "Make sure you only have one sheet for each version and there is a number '1' or 'one' corresponding to the version number in the sheet name."
+         ))
+         break
+       }
+       else {
+         list.df[[n]] <- read_excel(input$graded_template$datapath,sheetN)}  
+     }
+     df.list <- import_WPR_excel(list.df,length(sheets))
+     #first is df of all grades for gradebook, second element is df of questions
+     #third element is df of duplicates, fourth element is those that aren't in either version
+     canvas.upload.df$dataframes <- df.list
+     showModal(modalDialog(
+       title = "Import Successful",
+       HTML("Check for duplicates and correct as needed or upload to Canvas"),
+       footer = modalButton("Close")
+     ))
+     enable("upload_grades_canvas")
+     
+   },
+   error = function(e) {
+     showErrorModal(paste("Error:", e$message))
+   })
+ })
   
   
   
+  #### Duplicate Data for Grade Upload ####
+  output$duplicateTableUploads <- renderTable({
+    if(length(canvas.upload.df$dataframes) > 0) {
+      #browser()
+    
+    duplicates <- canvas.upload.df$dataframes[[3]]
+    } else {
+      return(NULL)
+    }
+  })
+ #list of students with no entry
+ output$noEntryTableUploads <- renderTable({
+   if(length(canvas.upload.df$dataframes) > 0) {
+     #browser()
+     
+     duplicates <- canvas.upload.df$dataframes[[4]]
+   } else {
+     return(NULL)
+   }
+ })
+ 
+ 
+  observeEvent(input$upload_grades_canvas, {
+    #logic to upload to canvas
+    # define based on template reactive
+    
+    #ID, Name,version,Section, Course.ID,Assignment.ID,mge.points
+    grades.df <- canvas.upload.df$dataframes[[1]]
+    #rename mge.points to points
+    grades.df <- grades.df %>% rename(id=ID,
+                                      points = mge.points,
+                                      course_id = Course.ID,
+                                      assignment_id = Assignment.ID)
+    resp <- lapply(split(grades.df, grades.df$course_id), grade_assignments_bulk)
+    
+    #resp is a string display it using a modal so user can see if it worked
+    resultVector <- unlist(resp)
+    concatenatedResult <- paste(resultVector, collapse = "<br/>")
+    
+    showModal(modalDialog(
+      title = "Upload Status",
+      HTML(concatenatedResult), # Use HTML() to interpret line breaks
+      footer = modalButton("Close")
+    ))
+    
+  })
 }

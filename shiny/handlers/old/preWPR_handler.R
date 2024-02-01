@@ -1,7 +1,8 @@
 
 
 #### UI ####
-
+#Previous functionality to generate the brief based on canvas gradebook files.
+#Now obsolete with API access
 createPreWPRPage <- function() {
   fluidRow(
     column(width = 6,

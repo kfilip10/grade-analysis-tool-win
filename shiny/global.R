@@ -64,9 +64,6 @@ bodystyle <- " font-size: 16px; /* Change font size */
 #if it is NULL then that can be used for logic in the UI to prompt the user to enter it in the settings.
 
 
-canvas_api_token_path <- file.path(settings_path,"token.rds")
-api_domain <- "https://westpoint.instructure.com"
-
 
 #saveRDS(canvas_api_token, canvas_api_token_path)
 
@@ -92,6 +89,12 @@ showErrorModal <- function(errorMsg) {
     )
   )
 }
+canvas_api_token_path <- file.path(settings_path,"token.rds")
+#check if file exists
+if (!file.exists(canvas_api_token_path)) {
+  saveRDS("", canvas_api_token_path)
+} 
+api_domain <- "https://westpoint.instructure.com"
 
 
 #### Letter grade function ####

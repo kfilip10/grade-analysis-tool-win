@@ -13,7 +13,7 @@ parse_version <- function(df,versionNum,vers.color) {
   if(row_ID==row_Section){
     # Then it is working
   }else{
-    stop("Make sure your excel follows the template exactly. An error was encountered in locating the Cadet ID and Section columns")}
+    stop("Make sure your excel follows the template exactly. An error was encountered in locating the Student ID and Section Row")}
   #split the dataframe into the header and the data
   df.vers.header <- df[1:(row_ID-1),]
   df.data.colNames <- df[row_ID,]
@@ -56,24 +56,36 @@ parse_version <- function(df,versionNum,vers.color) {
   #remove NA cols from df.data
   #find index of column by name
   col.start <-  which(colnames(df.data)=="ID")[1]
-  col.end <- which(colnames(df.data)=="Pre Max")[1]
+  col.end <- which(colnames(df.data)=="Assignment ID")[1]
   df.data <- df.data[,col.start:col.end]
   #which(colnames(df.data)=="ID")[1]
   #df.data[which(colnames(df.data)=="ID")[1]]
-  #extract the ID, section, and cadet name from df.data
+  #extract the ID, section, and student name from df.data
+  #remove all rows that have incomplete data
   course.roster <- data.frame(df.data["ID"],
+                              df.data["Instructor"],
                               df.data["Section"],
-                              df.data["Name"])
-  
-  #remove NAs from course.roster
+                              df.data["Name"],
+                              df.data["Course ID"],
+                              df.data["Assignment ID"])
   course.roster <- course.roster[complete.cases(course.roster),]
   
-  #convert columns afterthe first three to numeric
-  df.data[,4:ncol(df.data)] <- sapply(df.data[,4:ncol(df.data)],as.numeric)
+  
+  df.data <- df.data[complete.cases(df.data),]
+
+  complete.Entries <- nrow(df.data)
+
+  
+  #convert columns with numeric values to numeric
+  col.Section<- which(colnames(df.data)=="Section")[1] -1
+  df.data[,4:col.Section] <- sapply(df.data[,4:col.Section],as.numeric)
+  col.assignment_id<- which(colnames(df.data)=="Assignment ID")[1]
+  
+  df.data[,col.assignment_id] <- sapply(df.data[,col.assignment_id],as.numeric)
   
   
   #remove rows that have a 0 in the total column from df.data
-  df.data <- df.data %>% filter(Total!=0)
+  #df.data <- df.data %>% filter(Total!=0)
   
   #finds any NA values in df.data2 and sets it to 0
   df.data[is.na(df.data)] <- 0
@@ -119,15 +131,13 @@ import_WPR_excel <- function(list.df,numberVersions){
   }
   
   #gb is
-  # big summary table with cadets
+  # big summary table with all students
   # version header info
-  # total cadets list
-  
   
   #combines for summary df and question df
   # df.total is used for the summary data
   # df.q dataframe is used for the question data
-  # df.q needs an entry for every cadet that took times the number of problems (247x8x2 roughly 3705)
+  # df.q needs an entry for every student that took times the number of problems (247x8x2 roughly 3705)
   # question, score, concept, cut.page, max (points), v.label ("Version 1"), version (num)
   #i=1
   df.roster <- gb[[1]][[3]]
@@ -179,20 +189,23 @@ import_WPR_excel <- function(list.df,numberVersions){
   
   #retrieve the section from df.roster for each element in did_not_take_any_exam
   no.entries <- df.roster[df.roster$Name %in% did_not_take_any_exam,]
-  
   df.q$percent <- df.q$score/df.q$max
   df.q$grade <- sapply(df.q$percent,letter_grade,breaks,grades)
   df.q$percent <-     df.q$percent*100
   
   #Need to look at the 
   
-  #find duplicates in df.total CADET NAME
+  #find duplicates in df.total Student NAME
   duplicate.entries <- df.total[duplicated(df.total$ID),]
+  dup.entries.df <- df.roster[df.roster$Name %in% duplicate.entries$Name,]
   
+  #browser()
+  #left join df.total and df.roster by ID
+  df.total <- left_join(df.total,df.roster%>%select(ID,Course.ID,Assignment.ID),by="ID")
   list.df=list()
   list.df[[1]] <- df.total
   list.df[[2]] <- df.q
-  list.df[[3]] <- duplicate.entries #these will be those that are in both versions
+  list.df[[3]] <- dup.entries.df #these will be those that are in both versions
   list.df[[4]] <- no.entries #this will be those that are in neither version
   
   
@@ -418,7 +431,7 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
   ppt <- pop.pre.t.test(df.total,ppt)
   
   
-  #### Cadets who didn't take it ####
+  #### students who didn't take it ####
   
   no.entries.ft <- no.entries %>% flextable() %>% align_nottext_col(align = "center") %>%
     align_text_col(align = "center") %>% colformat_double( digits = 1) %>%  
