@@ -1,12 +1,21 @@
 #### DEV / DEBUG BLOCK ####
 #### Things I run while debugging NOT USED IN THE MAIN APP####
 
+# saveRDS(df,file ="env/uploaded template graded.rds")
+
+
+df <- readRDS("env/uploaded template graded.rds")
+
+#### loading ####
+
+
+read_excel
 
 cutSheet=NULL
 file.pdf <- "C:/Users/kev/OneDrive - West Point/6. R Projects/grade report/WPR2 cut.pdf"
 pdf <- magick::image_read_pdf(file.pdf)
 #### Load list manually #######################################################
-file.excel <- "C:/Users/kev/OneDrive - West Point/6. R Projects/new input.xlsx"
+file.excel <- "C:/Users/kev/OneDrive - West Point/6. R Projects/template 18JAN.xlsx"
 
 list.df <- list()
 versions <- excel_sheets(file.excel)
@@ -46,7 +55,7 @@ incProgress <- function(n,detail){
   print(s)
   return(NULL)
 }
-numberVersions <- 2
+numberVersions <- 1
 a <- import_WPR_excel(list.df,numberVersions)
 
 df.total <- a[[1]]

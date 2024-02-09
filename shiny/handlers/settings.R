@@ -96,17 +96,12 @@ settings_Handler <- function(input, output, session) {
   
   #### Edit API Token ####
   # check if canvas_api_token is null
-  #if(is.null(canvas_api_token)){
-  #  canvas_api_token <- ""
-  #}
-
-  token <- reactiveVal(NULL)  
-    #if(is.null(readRDS(canvas_api_token_path))){
-    #token("")
-#  }else{
-#    token(readRDS(canvas_api_token_path))
- # })# Initialize a reactive value to store the token
-  #check if readRDS(canvas_api_token_path) is null
+  token <- reactiveVal(  
+    if(is.null(readRDS(canvas_api_token_path))){
+    return("")
+  }else{
+    readRDS(canvas_api_token_path)
+   })
 
   #default reactiveVal is the token loaded by global
   #if(is.null(canvas_api_token)){canvas_api_token <- ""}else{
@@ -114,6 +109,7 @@ settings_Handler <- function(input, output, session) {
   saveStatus <- reactiveVal("") # Reactive value to store the save status
   
   observeEvent(input$editToken, {
+    saveStatus("")
     showModal(modalDialog(
       title = "Edit API Key",
       tagList(
@@ -131,7 +127,7 @@ settings_Handler <- function(input, output, session) {
                 "for additional instructions, if needed"),
       tags$p("Input your Canvas API token below:"),
         ),
-      textInput(inputId="token", label=HTML("<b>API Token</b>"), value = , width = "100%"),
+      textInput(inputId="token", label=HTML("<b>API Token</b>"), value = token(), width = "100%"),
       tags$p(textOutput("saveStatus")), # Display the save status
       footer = tagList(
       actionButton("saveBtnToken", "Save Changes"),
@@ -145,14 +141,15 @@ settings_Handler <- function(input, output, session) {
     # Attempt to save the file and update the save status
     tryCatch({
       saveRDS(input$token, canvas_api_token_path)
-      saveStatus("Token successfully saved.") # Update status on success
+      token(input$token) # Update the token value
+      saveStatus("Token successfully saved. You may attempt to connect.") # Update status on success
     }, error = function(e) {
       saveStatus(paste("Error:", e$message)) # Update status on error
     })
     
     # Close the modal dialog after a delay to allow user to read the message
-    invalidateLater(2000) # 2 seconds delay
-    removeModal()
+    #invalidateLater(2000) # 2 seconds delay
+    #removeModal()
   })
   
   output$saveStatus <- renderText({
