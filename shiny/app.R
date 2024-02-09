@@ -3,7 +3,7 @@
 # Started with a simple template from https://shiny.posit.co/r/gallery/start-simple/faithful/
 # Modularized over time to make it easier to maintain and add new features piece by piece
 # Structure: 
-# - ui calls functions in the handlers folder to create the UI
+# - ui (below) calls functions in the handlers folder to create the UI
 # - server calls corresponding functions in the handlers folder which passes the session to communicate back and forth
 # - Each handler script includes its UI and server functions
 # - shinyApp(ui = ui, server = server) launches the app
@@ -59,8 +59,7 @@ ui <- fluidPage(
              value = "prep_panel",
              icon = icon("cloud",lib="glyphicon"),
              tabsetPanel(
-               
-               tabPanel("Canvas Gradebook and Template", withSpinner(uiOutput("Canvas_data_UI"))),#this calls     createCanvasPrepPage() dynamically
+               tabPanel("Canvas Gradebook and Template", withSpinner(createCanvasPrepPage())),#this calls     createCanvasPrepPage() dynamically
                tabPanel("Assignment Group Stats", canvas_assignment_viewer()),
                tabPanel("Course grade Stats", canvas_gradebook_viewer()),
                tabPanel("Canvas Grade uploads", withSpinner(uiOutput("Upload_Grades_UI"))),#withSpinner(

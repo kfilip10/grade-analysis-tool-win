@@ -12,6 +12,10 @@ if (!dir.exists(settings_path)) {
 grade_csv_name <- "GradeThresholds.csv"
 grade_csv_path <- file.path(Sys.getenv("USERPROFILE"),"Documents",settings_folder,grade_csv_name)
 
+#List of courses to save for easy reloading
+COURSE_DEFAULTS <- "COURSE_DEFAULTS.rds"
+COURSE_DEFAULTS_PATH <- file.path(settings_path,COURSE_DEFAULTS)
+
 #This function checks if the GradeThresholds.csv is in the user documents folder, if it isn't then it adds it
 
 
@@ -26,6 +30,7 @@ check_grade_csv <- function() {
     #return(TRUE)
   }
 }
+
 #Load csv into settings folder and then define the grades and breaks vectors for use in the app
 check_grade_csv()
 grades.csv <- read.csv(grade_csv_path)
@@ -54,18 +59,6 @@ bodystyle <- " font-size: 16px; /* Change font size */
                 color: #000000; 
                 padding: 10px;
                 border: 2px solid #ffffff;/* Add a border */"
-
-
-#### Canvas API token ####
-
-#Canvas API token storage
-#check if there is a token .rds in the settings folder
-#if there is then import it, else set to NULL
-#if it is NULL then that can be used for logic in the UI to prompt the user to enter it in the settings.
-
-
-
-#saveRDS(canvas_api_token, canvas_api_token_path)
 
 
 

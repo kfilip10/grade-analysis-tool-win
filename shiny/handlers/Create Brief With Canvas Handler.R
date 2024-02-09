@@ -11,9 +11,8 @@ createBriefUploadPage <- function() {
                                       (Leave blank if no cut sheets are desired in final brief) "), accept = c(".pdf")),
     h5("1a. Select the Excel sheets which correspond to your WPR data:"),
     uiOutput("checkboxes"),
-    h4("2. Import the excel data using the button below:"),
-    disabled(actionButton("importWPRExcelBtn", "Import Excel Data",style = "background-color: #3498db; color: #ffffff;")),
-    
+    h4("2. Load the excel data into the app using the button below:"),
+    disabled(actionButton("importWPRExcelBtn", "Load Excel Data",style = "background-color: #3498db; color: #ffffff;")),
   )
   
   

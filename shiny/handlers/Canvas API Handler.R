@@ -5,18 +5,58 @@
 # The first functions below are called as tabset panels in app.R
 #this is the first tabset, it runs on loading the tab.
 
-
+#this is the function that is called from app.R
+#This triggers the check for the API connection
 createCanvasPrepPage <- function() {
   tabPanel("Canvas Data",
-           fluidRow(
-             column(width = 10,
-                    h3("Canvas Data and Grading Template Generator"),
-                    p("This page allows you to access your Canvas Course Data from the API and generate the grading template"),
+           sidebarLayout(
+             sidebarPanel(
+                    tags$br(),
                     uiOutput("tokenStatus"),  # withSpinner(Placeholder for token status
-                    uiOutput("connectionStatus"),  #withSpinner( Placeholder for connection status
-             )
-           ))
+                    withSpinner(uiOutput("connectionStatus")),
+                    h4("Courses Selected:"),
+                    uiOutput("selected_courses_list"),
+             ),
+             mainPanel(
+               h3("1. Select Courses"),
+               actionButton(inputId = "courseShowHide",label = "Show/Hide Course Selection"),
+               div(id="course_checkbox_div", style = "display: none;",
+                   uiOutput("courseCheckboxUI")
+                  ),
+               h3("2. Load and Select Assignments"),
+               actionButton(inputId = "loadAssignments",label = "Load Assignments List",
+                                     style="color: white; background-color: green"),
+              actionButton(inputId = "assignmentShowHide",label = "Show/Hide Assignment List"),
+              tags$p("Loading the assignment listing will take approximately 2 seconds per course selected."),
+               div(id="assignment_div",
+                   uiOutput("assignmentUI")
+               ),
+                h3("3. Load the assignment data for the selected courses:"),
+               disabled(actionButton(inputId = "load_canvas_data",label = "Load Grade and Roster Data from Canvas",
+                                      style="color: white; background-color: green")),
+                tags$hr(),
+                h3("4. Download Options"),
+                h4("4a. Download a gradebook of the checkbox assignments above:"),
+                disabled(downloadButton("download_gradebook_canvas", "Download Canvas Gradebook")),
+                h4("4b. Download a grading template:"),
+                h5("Select which assignment to generate a grading template for:"),
+                uiOutput("templateAssignmentUI"),
+                disabled(downloadButton("download_template_canvas", "Download WPR Grading Template"))
+               
+               
+               )
+        )
+        )
+  
+
+  
+  
 }
+# JavaScript to toggle the display property of the div
+
+
+#UI element for assignment grouping data visualizer
+#IN PROGRESS - LOW PRIORITY
 canvas_assignment_viewer <- function() {
   fluidPage(
     titlePanel("Assignment Group Data with Filtering"),
@@ -39,11 +79,12 @@ canvas_assignment_viewer <- function() {
 }
 
 #plot and table viewer similar to above for overall grades in the course by section
+#IN PROGRESS - LOW PRIORITY
+
 canvas_gradebook_viewer<- function() {
   #Build in gradbook viewer plot and table.
 
 }
-
 
 # function to take the template excel file and upload grades to canvas
 canvas_grade_upload <- function (){
@@ -104,12 +145,9 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     if (is.null(canvas_api_token())) {
       tags$p(style = "color: red;", "You do not have a Canvas API token set. Please go to the settings page to set up your Canvas Token to be able to use this page.")
     } else {
-      tags$p("Have Token")
       #I could put text here if it was needed but I don't think it is
-      #tags$p("Your Canvas API token was found in settings.")
     }
   })
-  
   
   # If the connection is successful, render the UI for the page
   #This is the main UI for API UI
@@ -125,46 +163,28 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     }
     #If it does work then show the main UI for Canvas API access
     else if (!is.null(connection_status()) && connection_status() == "Success") {
-      #make the list on the page       
-      tagList(
-        #show the success message
-        tags$p(style = "color: white;font-weight: bold;background-color: #6fbd7a;
-                              text-align: center; border-radius: 10px; padding: 5px;",
-               "API Connection Successful!"),
-        h3("Instructions"),
-        tags$ol(
-          tags$li("First Select the courses you want to collect data from."),
-          tags$li("NOTE: The courses you select must have assignments with the same name (it is designed to work with Canvas blueprint)"),
-          tags$li("Click the 'show/hide' Assignment Listing to generate list of assignments to choose from"),
-          tags$li("Click the 'automatically load data from canvas' button"),
-          tags$li("Now you are able to view graph data (other tabs), download a grading template, and download a gradebook."),
-        ),
-        tags$hr(),
-        #show the course selection button
-        h3("Select course data"),
-        h4("1. Select the Courses to collect data:"),
-        #show the button to show/hide the course selection
-        actionButton(inputId = "courseShowHide",label = "Show/Hide Course Selection"),
-        div(id="course_checkbox_div", style = "display: none;",
-            uiOutput("courseCheckboxUI")),
-        h4("2. Select the Assignment data from the list:"),
-        tags$p("Generating the assignment listing will take approximately 2 seconds per course selected."),
-        disabled(actionButton(inputId = "assignmentShowHide",label = "Show/Hide Assignment List")),
-        div(id="assignment_div", style = "display: none;",
-            uiOutput("assignmentUI")),
-        h4("3. Load the assignment data for the selected courses:"),
-        disabled(actionButton(inputId = "load_canvas_data",label = "Automatically Load Data from Canvas",
-                              style="color: white; background-color: green")),
-        tags$hr(),
-        h3("Download Options"),
-        h4("4a. Download a gradebook of the checkbox assignments above:"),
-        disabled(downloadButton("download_gradebook_canvas", "Download Canvas Gradebook")),
-        h4("4b. Download a grading template:"),
-        h5("Select which assignment to generate a grading template for:"),
-        uiOutput("templateAssignmentUI"),
-        disabled(downloadButton("download_template_canvas", "Download WPR Grading Template")),
-
-      )
+      #make the list on the page
+          tagList(
+          #show the success message
+          tags$p(style = "color: white;font-weight: bold;background-color: #6fbd7a;
+                                text-align: center; border-radius: 10px; padding: 5px;",
+                 "API Connection Successful!"),
+          h3("Instructions"),
+          tags$ol(
+            tags$li("First Select the courses you want to collect data from."),
+            tags$li("NOTE: The courses you select must have assignments with the same name (it is designed to work with Canvas blueprint)"),
+            tags$li("Click the 'show/hide' Assignment Listing to generate list of assignments to choose from"),
+            tags$li("Click the 'automatically load data from canvas' button"),
+            tags$li("Now you are able to view graph data (other tabs), download a grading template, and download a gradebook."),
+          ),
+          tags$hr(),
+          #show the course selection button
+          #show the courses selected from the courseCheckboxUI
+          #actionButton(inputId = "courseShowHide",label = "Show/Hide Course Selection"),
+          #div(id="course_checkbox_div", style = "display: none;",
+          #    uiOutput("courseCheckboxUI")),
+          )
+      
     }
   })
   
@@ -195,24 +215,43 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
         group_split %>% purrr::map_df(~ get_assignment_groups(.x, unique(.x$id)))
       assign.group.comb <-  assign.group.comb %>% rename(assignment_group_id = id)
       assign.group.comb <-  assign.group.comb %>% rename(assignment_group_name = name)
+      
+      #check if course_list_default is all listed in the course_list_df
+      if(!all(course_list_default() %in% course_list_df()$name)){
+        course_list_default("")
+      }
+      
       return(assign.group.comb)
     } else {
       NULL
     }
   })
   
+  #### Course Selection ####
+  selected_courses <- reactiveVal(NULL)
+  
+  course_list_default <- reactiveVal(  
+    if(is.null(readRDS(COURSE_DEFAULTS_PATH))){
+      return("")
+    }else{
+      course_default <- readRDS(COURSE_DEFAULTS_PATH)
+      selected_courses(course_default)
+      course_default
+    })
   
   #render the course list as a checkbox
   output$courseCheckboxUI <- renderUI({
     tagList(
     checkboxGroupInput("courseCheckbox", "Select only the courses that will share the same assignment names:", 
                        choices = course_list_df()$name,
-                       selected=NULL,
+                       selected=course_list_default(),
                        inline = FALSE,
                        width='400px'),
     #add a select all button,
     actionButton("courseCheckboxselectAll", "Select All"),
-    actionButton("courseCheckboxdeselectAll", "Deselect All")
+    actionButton("courseCheckboxdeselectAll", "Deselect All"),
+    actionButton("saveCourseList", "Save Selected Courses as Default")
+    
     )
     })
   
@@ -226,19 +265,55 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     runjs('$("#courseCheckbox input[type=checkbox]").prop("checked", false);')
   })
   
-  
   #selected courses reactive used to filter the courses
-  selected_courses <- reactiveVal()
   
   #observer to save the checkbox options into a reactive expression
   observeEvent(input$courseCheckbox, {
     selected_courses(input$courseCheckbox)
     
-    enable("assignmentShowHide")
+    #enable("assignmentShowHide")
     # Update the reactive value when the selection changes
   })
+    
+  output$selected_courses_list <- renderUI({
+    selected <- selected_courses()
+    if (is.null(selected) || length(selected) == 0) {
+      tags$li("No options selected")
+    } else {
+      tags$ul(
+        lapply(selected, function(option) {
+          tags$li(option)
+        })
+      )
+    }
+  })
   
+  #### Save Default Courses ####
+  observeEvent(input$saveCourseList, {
+    # Attempt to save the file and update the save status
+    tryCatch({
+      saveRDS(input$courseCheckbox, COURSE_DEFAULTS_PATH)
+      showModal(modalDialog(
+        title = "Success",
+        paste("Courses Saved"),
+        easyClose = TRUE,
+        footer = NULL
+      ))    }, error = function(e) {
+        showModal(modalDialog(
+          title = "Error",
+          paste("An error has occurred in saving. You may have to restart the app.", e$message),
+          easyClose = TRUE,
+          footer = NULL
+        ))    })
+    
+    # Close the modal dialog after a delay to allow user to read the message
+    #invalidateLater(2000) # 2 seconds delay
+    #removeModal()
+  })
 
+  
+  
+  
   
   #### Load Course Data ####
   
@@ -247,30 +322,34 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     toggle(id = "assignment_div",anim = T)
   })
   
-  assignment_list_df <- reactive({
-    
-    tryCatch({
-      if (!is.null(connection_status()) && connection_status() == "Success") {
-        get_like_assignments(course_list_df()%>%filter(name %in% selected_courses()))
-        
-      } else {
-        NULL
-      }
-    }, error = function(e) {
+  #loadAssignments button is clicked
+  observeEvent(input$loadAssignments, {
+    #require selected courses to be not NULL
+    req(selected_courses())
+    #if the connection is successful, then load the assignments
+    if (!is.null(connection_status()) && connection_status() == "Success" && 
+        !is.null(selected_courses()) && length(selected_courses()) > 0) {
+      #get the assignments
+      
+      df <- get_like_assignments(course_list_df()%>%filter(name %in% selected_courses()))
+      assignment_list_df(df)
+    } else {
       showModal(modalDialog(
         title = "Error",
-        paste("An error has occurred, please check your course selections. You may have to restart the app.", e$message),
+        paste("An error has occurred, please check your course selections. You may have to restart the app."),
         easyClose = TRUE,
         footer = NULL
       ))
-    })
+    }
   })
+  
+  assignment_list_df <- reactiveVal(NULL)
   
   output$assignmentUI <- renderUI({
     fluidPage(
       checkboxGroupInput("assignmentCheckbox", 
                          HTML("<b>Select the assignments you would like to include 
-                         in your gradebook pull:</b>"), 
+                         in the Canvas Data Pull gradebook pull:</b>"), 
                          choices = unique(assignment_list_df()$name),
                          #selected=course_list_df()$name,
                          inline = FALSE,
@@ -440,13 +519,29 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
 
       gb.comb.parse <- course_gradebook()
       #Pivot wider to get assignment id as columns names
-      gb.comb.parse <- gb.comb.parse %>% pivot_wider(names_from = assignment_name,
-                                                     values_from = c(score,points_possible,percent),
-                                                     names_glue = "{assignment_name}_{.value}")
+      gb.comb.parse <- gb.comb.parse %>% select(-course_name,-assignment_group_id,-assignment_group_name,
+                                                user_id,course_id,instructor,
+                                                section)%>%  
+        pivot_wider(names_from = assignment_name,values_from = c(score,points_possible,percent),
+                                                     names_glue = "{assignment_name}_{.value}") 
 
       #now join the user_id and roster.course to get the student names
-      gb.xl <- roster.course  %>% left_join(gb.comb.parse, by = "user_id")
+      
+      
+      gb.xl <- roster.course %>% select(user_id,user.sortable_name,user.login_id,
+                                   Score,Grade,Points,`Max Points`)  %>% 
+        left_join(gb.comb.parse, by = "user_id")%>% 
+        mutate(Score = Score/100,`Max Points` = round(`Max Points`,digits=1),
+               Points = round(Points,digits=1))
+      
+     # df_renamed <- rename(df, NewName1 = OldName1, NewName2 = OldName2)
+      gb.xl <- rename(gb.xl, ID = user_id, Name = user.sortable_name, `Course ID` = course_id,
+                        Instructor = instructor, Section = section,
+                                Email = user.login_id, Score = Score, Grade = Grade, Points = Points,
+                                `Max Points` = `Max Points`)
 
+      gb.xl <- gb.xl %>% select(ID,Name,Email,`Course ID`,Instructor,Section,
+                                Grade,Score,Points,`Max Points`,everything())
       #download gb.xl as an xlsx file
       write.xlsx(gb.xl, file)
     })
