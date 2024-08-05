@@ -8,16 +8,13 @@
 #inputs: event name, roster_course_df(), assignment_list_df()
 #Assume I select "Intro Survey" as my graded event
 excel_template_from_canvas <- function(roster.course,assign.df,event.name){
-
     #roster.course is roster_course_df()
     #assign.df is assignment_list_df()
     #first I need the list of user IDs, instructors, user.sortable_name,Points,Max points,and the last 8 characters of name
-    template.df <- roster.course %>% select(user_id, instructor, user.sortable_name, Points, `Max Points`, course_id, section) %>%
-    mutate(section = substr(section, nchar(section)-7, nchar(section)))
-    
+    template.df <- roster.course %>% select(user_id, instructor, user.sortable_name, Points, `Max Points`, course_id, section,section_hour)
     #mutate the name again to remove the last character
-    template.df <- template.df %>% mutate(section = substr(section, 1, nchar(section)-1))
-    template.df <- template.df %>% mutate(percent = Points/`Max Points`)
+    #template.df <- template.df %>% mutate(section = substr(section, 1, nchar(section)-1))
+    #template.df <- template.df %>% mutate(percent = Points/`Max Points`)
 
     #now I need to get the assignment ID for the event name from the assign.df
     # and match it using the course_id in template.df
@@ -41,17 +38,23 @@ excel_template_from_canvas <- function(roster.course,assign.df,event.name){
     print("Input File does not exist or cannot be accessed.")
     }
     template.path <- file.path(tempDir,new_temp_name)
+    data <- readWorkbook(wb_path, sheet = 1)
+    row_ID = 6
+
     wb <- loadWorkbook(template.path)
-    
+    #browser()
     #write student names
-    writeData(wb, sheet = 1, x = template.df$user_id, startRow = 10, startCol = 3, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$instructor, startRow = 10, startCol = 4, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$user.sortable_name, startRow = 10, startCol = 5, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$Points, startRow = 10, startCol = 16, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$`Max Points`, startRow = 10, startCol = 17, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$course_id, startRow = 10, startCol = 19, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$section, startRow = 10, startCol = 20, colNames = FALSE)
-    writeData(wb, sheet = 1, x = template.df$assignment_id, startRow = 10, startCol = 21, colNames = FALSE)
+    #find the row that has id in the loaded workbook
+    
+    writeData(wb, sheet = 1, x = template.df$user_id, startRow = row_ID, startCol = 3, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$instructor, startRow = row_ID, startCol = 4, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$section, startRow = row_ID, startCol = 5, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$section_hour, startRow = row_ID, startCol = 6, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$user.sortable_name, startRow = row_ID, startCol = 7, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$Points, startRow = row_ID, startCol = 18, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$`Max Points`, startRow = row_ID, startCol = 19, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$course_id, startRow = row_ID, startCol = 21, colNames = FALSE)
+    writeData(wb, sheet = 1, x = template.df$assignment_id, startRow = row_ID, startCol = 22, colNames = FALSE)
     
     
     saveWorkbook(wb, template.path,overwrite=TRUE)

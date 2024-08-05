@@ -4,7 +4,7 @@
 // Generally the R server generation is from the base code, but the rest is modified by KTF
 
 //Imports most of the packages
-import { app, session, BrowserWindow } from 'electron'
+import { dialog, app, session, BrowserWindow, ipcMain } from 'electron'
 import path from 'path' //used for __dirname since it isn't available in ESM
 import { fileURLToPath } from 'url'; //
 import http from 'axios' // used to make server
@@ -17,42 +17,80 @@ const rPath = getRPath(os.platform()) //gets the path for R based on platform
 const __dirname = path.dirname(fileURLToPath(import.meta.url)); //gets the directory name for the current file
 
 
-//Settings to relaunch afte first install - Not totally needed
-const SETTINGS_FILE = path.join(app.getPath('userData'), 'appSettings.json');
-let appSettings = {};
-// Read existing settings or initialize if not present
-if (fs.existsSync(SETTINGS_FILE)) {
-    appSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-} else {
-    appSettings = { firstLaunch: true, firstUpdate: true };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(appSettings));
+//Kill processes on relaunch (in case of bad shutdown)
+import e1 from 'child_process'
+const exec = e1.exec;
+const pidFilePath = path.join(app.getPath('userData'), 'rPIDs.txt');
+
+// Function to append the PID to a file
+function storePid(pid) {
+  fs.appendFileSync(pidFilePath, `${pid}\n`);
+}
+
+function killStoredProcesses() {
+  const pidFilePath = path.join(app.getPath('userData'), 'rPIDs.txt');
+  if (fs.existsSync(pidFilePath)) {
+    const pids = fs.readFileSync(pidFilePath, 'utf-8').split('\n').filter(Boolean);
+    pids.forEach(pid => {
+      if (os.platform() === 'win32') {
+        // Windows-specific command to forcefully terminate the process
+        exec(`taskkill /PID ${pid} /F /T`, (err, stdout, stderr) => {
+          if (err) {
+            console.error(`Failed to kill process ${pid}: ${err}`);
+            return;
+          }
+          console.log(`Process ${pid} killed successfully`);
+        });
+      } else {
+        // macOS and Linux
+        try {
+          process.kill(pid, 'SIGTERM'); // Attempt to gracefully terminate the process
+          console.log(`Process ${pid} has been terminated.`);
+        } catch (err) {
+          if (err.code === 'ESRCH') {
+            console.log(`Process ${pid} does not exist.`);
+          } else {
+            console.error(`Error terminating process ${pid}:`, err);
+          }
+        }
+      }
+    });
+    fs.writeFileSync(pidFilePath, ''); // Clear the file
+  }
 }
 
 
 // Auto updater section
-import  pkg from 'electron-updater' 
-const {autoUpdater} = pkg; //electron-updater is a common JS module, so we need to import it this way
+import pkg from 'electron-updater'
+
+const { autoUpdater } = pkg; //electron-updater is a common JS module, so we need to import it this way
 autoUpdater.autoDownload = true; //automatically download updates
 autoUpdater.autoInstallOnAppQuit = true; //automatically install updates on quit
 
 //posts log files to AppData/Roaming/APPNAME/Logs
 import log from 'electron-log'; //used for logging funcitonality
+import { create } from 'domain';
 autoUpdater.logger = log; //set the logger to the electron-log logger
 autoUpdater.logger.transports.file.level = 'info';
 
-//autoUpdater event handling
-autoUpdater.on('checking-for-update', () => {
-//can add code here if needed
+
+
+/* autoUpdater.on('update-available', (event, releaseNotes, releaseName) => {
+  // Notify user or handle the event
+  //make promise waiting for update to be downloaded
+  const waitForUpdateDownload = new Promise((resolve, reject) => {
+    autoUpdater.on('update-downloaded', resolve);
+    autoUpdater.on('error', reject);
   });
 
-autoUpdater.on('update-available', (event, releaseNotes, releaseName) => {
-  // Notify user or handle the event
-  createUpdateScreen()
-
-  // Prepare to apply update
-  setTimeout(() => {
-    autoUpdater.quitAndInstall();
-  }, 6000);
+  // Wait for the update to be downloaded
+  waitForUpdateDownload.then(() => {
+    // Notify the user that the update is ready to be installed
+    if (updateScreen) {
+      updateScreen.webContents.send('update-downloaded');
+    }
+  });
+  
 });
 
 autoUpdater.on('update-not-available', () => {
@@ -60,9 +98,8 @@ autoUpdater.on('update-not-available', () => {
 });
 
 autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
-  const flagPath = path.join(app.getPath('userData'), 'updateFlag.txt');
-  fs.writeFileSync(flagPath, 'updated');
-  autoUpdater.quitAndInstall();
+
+  
 });
 
 autoUpdater.on('error', (err) => {
@@ -70,7 +107,50 @@ autoUpdater.on('error', (err) => {
       updateScreen.webContents.send(err);
       updateScreen.close();
   }
+}); */
+
+
+//IPC event handling
+
+ipcMain.on('start-webserver-event', (event, arg) => {
+  if (serverProcess) {
+    console.log('Killing existing server process...');
+    serverProcess.kill();
+  }
+
+  console.log('Starting new server process...');
+  serverProcess = exec('your_server_command', (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error starting server: ${error.message}`);
+      updateScreen.webContents.send('update-message', { message: 'Failed to start server', error: true });
+      return;
+    }
+    console.log(`Server stdout: ${stdout}`);
+    console.error(`Server stderr: ${stderr}`);
+    updateScreen.webContents.send('update-message', { message: 'Server started successfully', attempt: 1 });
+  });
+
+  serverProcess.on('exit', (code) => {
+    if (code !== 0) {
+      console.log(`Server exited with code ${code}`);
+      updateScreen.webContents.send('update-message', { message: 'Server exited unexpectedly', error: true });
+    }
+  });
 });
+
+ipcMain.on('kill-server', () => {
+  if (serverProcess) {
+    console.log('Killing server process...');
+    serverProcess.kill();
+    serverProcess = null;
+    updateScreen.webContents.send('update-message', { message: 'Server process killed' });
+  }
+});
+
+ipcMain.on('send-update-message', (event, message) => {
+  updateScreen.webContents.send('update-message', message);
+});
+
 
 // signal if a shutdown of the app was requested
 // this is used to prevent an error window once the R session dies
@@ -85,11 +165,12 @@ const backgroundColor = '#2c3e50'
 
 // We have to launch a child process for the R shiny webserver
 // Things we need to take into account:
-  // The process dies during setup
+// The process dies during setup
 // The process dies during app usuage (e.g. the OS kills the process)
 // At the random port, another webserver is running
 // at any given time there should be 0 or 1 shiny processes
 let rShinyProcess = null
+// Define the file where PIDs will be stored to close R processes that stay open
 
 // tries to start a webserver
 // attempt - a counter how often it was attempted to start a webserver
@@ -97,276 +178,385 @@ let rShinyProcess = null
 // use the onErrorStartup callback to react to a critical failure during startup
 // use the onErrorLater callback to handle the case when the R process dies
 // use onSuccess to retrieve the shinyUrl
+
 const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
-                                 onErrorLater, onSuccess) => {
-                                   if (attempt > 3) {
-                                     await progressCallback({attempt: attempt, code: 'failed'})
-                                     await onErrorStartup()
-                                     return
-                                   }
+  onErrorLater, onSuccess) => {
+  const { dialog } = await import('electron');
 
-                                   if (rShinyProcess !== null) {
-                                     await onErrorStartup() // should not happen
-                                     return
-                                   }
+  if (attempt > 3) {
+    await progressCallback({ attempt: attempt, code: 'failed' })
+    await onErrorStartup()
+    return
+  }
 
-                                   let shinyPort = randomPort()
+  if (rShinyProcess !== null) {
+    await onErrorStartup() // should not happen
+    return
+  }
 
-                                   await progressCallback({attempt: attempt, code: 'start'})
+  let shinyPort = randomPort()
 
-                                   let shinyRunning = false
-                                   const onError = async (e) => {
-                                     console.error(e)
-                                     rShinyProcess = null
-                                     if (shutdown) { // global state :(
-                                       return
-                                     }
-                                     if (shinyRunning) {
-                                       await onErrorLater()
-                                     } else {
-                                       await tryStartWebserver(attempt + 1, progressCallback, onErrorStartup, onErrorLater, onSuccess)
-                                     }
-                                   }
+  await progressCallback({ attempt: attempt, code: 'start' })
 
-                                   let shinyProcessAlreadyDead = false
-                                   rShinyProcess = execa(rscript,
-                                                         ['--vanilla', '-f', path.join(app.getAppPath(), 'start-shiny.R')],
-                                                         { env: {
-                                                           'WITHIN_ELECTRON': '1', // can be used within an app to implement specific behaviour
-                                                           'RHOME': rpath,
-                                                           'R_HOME_DIR': rpath,
-                                                           'RE_SHINY_PORT': shinyPort,
-                                                           'RE_SHINY_PATH': shinyAppPath,
-                                                           'R_LIBS': libPath,
-                                                           'R_LIBS_USER': libPath,
-                                                           'R_LIBS_SITE': libPath,
-                                                           'R_LIB_PATHS': libPath} }).catch((e) => {
-                                                             shinyProcessAlreadyDead = true
-                                                             onError(e)
-                                                           })
-                                    
-                                    //defines gloabl url for shiny app
-                                   let url = `http://127.0.0.1:${shinyPort}`
-                                   for (let i = 0; i <= 10; i++) {
-                                     if (shinyProcessAlreadyDead) {
-                                       break
-                                     }
-                                     await waitFor(500)
-                                     try {
-                                       const res = await http.head(url, {timeout: 1000})
-                                       // TODO: check that it is really shiny and not some other webserver
-                                       if (res.status === 200) {
-                                         await progressCallback({attempt: attempt, code: 'success'})
-                                         shinyRunning = true
-                                         onSuccess(url)
-                                         return
-                                       }
-                                     } catch (e) {
+  let shinyRunning = false
+  //time before it times out and says to close
+  const serverStartupTimeout = 15000; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
 
-                                     }
-                                   }
-                                   await progressCallback({attempt: attempt, code: 'notresponding'})
+  // Setup a timeout to notify the user if the server hasn't started within the limit
+  const timeoutId = setTimeout(() => {
+    if (!shinyRunning) {
+      console.error("R Shiny server startup timed out.");
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'Server Startup Timeout',
+        message: 'The server failed to start within the expected time. Please restart the application.',
+        buttons: ['Restart']
+      }).then(() => {
+        app.relaunch();
+        try {
+          rShinyProcess.kill()
+        } catch (e) { }
+        app.quit(); // Quit the app or you can provide an option to restart
 
-                                   try {
-                                     rShinyProcess.kill()
-                                   } catch (e) {}
-                                 }
+      });
+    }
+  }, serverStartupTimeout);
+
+  const onError = async (e) => {
+    console.error(e)
+    rShinyProcess = null
+    if (shutdown) { // global state :(
+      return
+    }
+    if (shinyRunning) {
+      await onErrorLater()
+    } else {
+      await tryStartWebserver(attempt + 1, progressCallback, onErrorStartup, onErrorLater, onSuccess)
+    }
+  }
+
+  let shinyProcessAlreadyDead = false
+  try {
+
+    rShinyProcess = execa(rscript,
+      ['--vanilla', '-f', path.join(app.getAppPath(), 'start-shiny.R')],
+      {
+        env: {
+          'WITHIN_ELECTRON': '1', // can be used within an app to implement specific behaviour
+          'RHOME': rpath,
+          'R_HOME_DIR': rpath,
+          'RE_SHINY_PORT': shinyPort,
+          'RE_SHINY_PATH': shinyAppPath,
+          'R_LIBS': libPath,
+          'R_LIBS_USER': libPath,
+          'R_LIBS_SITE': libPath,
+          'R_LIB_PATHS': libPath
+        }
+      });
+    storePid(rShinyProcess.pid)
+    console.log(`Launched child process: PID: ${rShinyProcess.pid}`)
+  } catch (e) {
+    shinyProcessAlreadyDead = true;
+    console.log(`Shiny Died`)  //added this for troubleshooting
+    clearTimeout(timeoutId);
+    await onError(e); // Ensure onError is properly defined to handle th is
+  }
+
+  //defines gloabl url for shiny app
+  let url = `http://127.0.0.1:${shinyPort}`
+  for (let i = 0; i <= 29; i++) { //added from 10 to 20 attempts because 10 was too few
+    if (shinyProcessAlreadyDead) {
+      break
+    }
+    await waitFor(500)
+    try {
+      const res = await http.head(url, { timeout: 1000 })
+      // TODO: check that it is really shiny and not some other webserver
+      if (res.status === 200) {
+        await progressCallback({ attempt: attempt, code: 'success' })
+        shinyRunning = true
+        onSuccess(url)
+        return
+      }
+    } catch (e) {
+
+    }
+  }
+
+
+  await progressCallback({ attempt: attempt, code: 'notresponding' })
+
+  try {
+    rShinyProcess.kill()
+  } catch (e) { }
+}
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow
 let loadingSplashScreen
 let errorSplashScreen
-let updateScreen = null;
+let updateScreen
+
 //called when ready to launch
 //INPUT: url for shiny app
 //Creates mainwindow
 const createWindow = (shinyUrl) => {
-mainWindow = new BrowserWindow({
-width: 1200,
-height: 900,
-show: false,
-webPreferences: {
-preload: path.join(__dirname,'preload.js'),
-nodeIntegration: false,
-contextIsolation: true
-}
-})
-mainWindow.loadURL(shinyUrl)
+  mainWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+  mainWindow.loadURL(shinyUrl)
 
-// mainWindow.webContents.openDevTools()
+  // mainWindow.webContents.openDevTools()
 
-mainWindow.on('closed', () => {
-mainWindow = null
-})
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
 const splashScreenOptions = {
-width: 800,
-height: 600,
-backgroundColor: backgroundColor,
-webPreferences: {
-preload: path.join(__dirname,'preload.js'),
-nodeIntegration: false,
-contextIsolation: true
-}
+  width: 800,
+  height: 600,
+  backgroundColor: backgroundColor,
+  webPreferences: {
+    preload: path.join(__dirname, 'preload.js'),
+    nodeIntegration: false,
+    contextIsolation: true
+  }
 }
 
 const createSplashScreen = (filename) => {
-let splashScreen = new BrowserWindow(splashScreenOptions)
-splashScreen.loadURL(`file://${__dirname}/${filename}.html`)
-splashScreen.on('closed', () => {
-splashScreen = null
-})
-return splashScreen
+  let splashScreen = new BrowserWindow(splashScreenOptions)
+  splashScreen.loadURL(`file://${__dirname}/${filename}.html`)
+  splashScreen.on('closed', () => {
+    splashScreen = null
+  })
+  return splashScreen
 }
 
 //KTF added
 const createUpdateScreen = () => {
-    let updateScreen = new BrowserWindow({
-        width: 400,
-        height: 300,
-        frame: false,
-        transparent: false
+  return new Promise((resolve, reject) => {
+    updateScreen = new BrowserWindow({
+      width: 400,
+      height: 300,
+      frame: false,
+      transparent: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: true,
+        contextIsolation: false
+      }
     });
-    updateScreen.loadFile(path.join(__dirname, 'loading_download.html'));
-    updateScreen.on('closed', () => updateScreen = null);
-    updateScreen.webContents.on('did-finish-load', () => {
-        updateScreen.show();
+    updateScreen.loadFile(path.join(__dirname, 'loading_download copy.html'));
+
+
+    updateScreen.webContents.once('did-finish-load', () => {
+      updateScreen.show();
+      console.log("did finish load");
+      resolve(updateScreen);
     });
+
+    updateScreen.on('closed', () => {
+      updateScreen = null
+      reject(new Error('UpdateScreen was closed before it could finish loading.'));
+    });
+
+  });
+  // Ensure the window is ready before sending the message
 }
 
+
 const createLoadingSplashScreen = () => {
-loadingSplashScreen = createSplashScreen('loading')
+  loadingSplashScreen = createSplashScreen('loading')
 }
 
 const createErrorScreen = () => {
-errorSplashScreen = createSplashScreen('failed')
+  errorSplashScreen = createSplashScreen('failed')
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
+  killStoredProcesses();
 
-
-// Set a content security policy
-//Commented out for API call
-
+  // Set a content security policy
+  //Commented out for API call
   session.defaultSession.webRequest.onHeadersReceived((_, callback) => {
-  callback({
-  responseHeaders: `
+    callback({
+      responseHeaders: `
   "default-src 'self'; 
-  connect-src 'self' https://westpoint.instructure.com/;
   script-src 'self';
   img-src 'self' data:;
   style-src 'self';
   font-src 'self';
-  `})
+  `})//  connect-src 'self' https://westpoint.instructure.com/; REMOVED THIS FOR NOW
   })
 
   // Deny all permission requests
   session.defaultSession.setPermissionRequestHandler((_1, _2, callback) => {
-  callback(false)
+    callback(false)
   })
 
-  //Added this to account for relaunch after update from GPT
-  const flagPath = path.join(app.getPath('userData'), 'updateFlag.txt');
+  try {
+    await createUpdateScreen();
+    // At this point, the updateScreen has finished loading
+    console.log("wait is over");
+    autoUpdater.checkForUpdatesAndNotify();
 
-  if (fs.existsSync(flagPath)) {
-      fs.unlinkSync(flagPath); // Remove the flag file
-      // Logic to restart the app
-      app.relaunch();
-      app.exit();
+  } catch (error) {
+    console.error('Failed to initialize update screen:', error);
   }
-  if (appSettings.firstLaunch) {
-    appSettings.firstLaunch = false;
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(appSettings));
-    
-    // Logic to handle first-time launch after installation
-    // For example, restart the app if needed
-    app.relaunch();
-    app.exit();
-}
 
-//runs autoUpdater
-  autoUpdater.checkForUpdatesAndNotify();
+
 
   //This makes a promise in this asynch function that waits for the autoUpdater to finish
   //designed to make sure that the autoUpdater is done before loading the rest of the program
+  // const waitForAutoUpdate = new Promise((resolve, reject) => {
+  //  autoUpdater.on('update-not-available', resolve);
+  //  autoUpdater.on('update-available', resolve);
+  //  autoUpdater.on('error', reject);
+  //});
+
   const waitForAutoUpdate = new Promise((resolve, reject) => {
-    autoUpdater.on('update-not-available', resolve);
-    autoUpdater.on('update-available', resolve);
-    autoUpdater.on('error', reject);
+    let updateTimeout;
+
+    //runs autoUpdater
+    //autoUpdater event handling
+    autoUpdater.on('checking-for-update', () => {
+      updateScreen.webContents.send('update-message', 'Checking for updates...');
+      // waitFor(2000);
+      //can add code here if needed
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      console.log('No update available.');
+      resolve('No update available');
+    });
+
+    autoUpdater.on('update-available', () => {
+      console.log('Update available. Downloading...');
+      updateScreen.webContents.send('update-message', 'Update available. Downloading...');
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      let log_message = "Download speed: " + progressObj.bytesPerSecond;
+      log_message = log_message + '\n Downloaded ' + progressObj.percent + '%';
+      log_message = log_message + '\n (' + progressObj.transferred + "/" + progressObj.total + ')';
+
+      // Here, you would typically send this progress information to your renderer process
+      updateScreen.webContents.send('update-message', log_message);
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      updateScreen.webContents.send('update-message', 'Update downloaded and ready to install.');
+
+      try {
+        rShinyProcess.kill()
+      } catch (e) { }
+      app.quit();
+      autoUpdater.quitAndInstall();
+      resolve('Update downloaded');
+    });
+
+    autoUpdater.on('error', (error) => {
+      clearTimeout(updateTimeout); // Clear the timeou
+      console.error('Error during the update process:', error);
+      reject(error);
+    });
+
+    // Setup a timeout to reject the promise if the update takes too long
+    updateTimeout = setTimeout(() => {
+      autoUpdater.removeAllListeners(); // Remove listeners to prevent memory leaks
+      reject(new Error('Update process timed out.'));
+    }, 45000); // Timeout after 45 seconds
   });
+
+
+
 
   if (process.defaultApp) {
     // The app is running from the terminal (not packed)
-    console.log("Launched from terminal, not launching updater");
-    createLoadingSplashScreen();
+
+    console.log("Launched from terminal, testing updater");
+    //autoUpdater.emit('checking-for-update')
+    //autoUpdater.emit('checking-for-update')
+    updateScreen.close();
+
+    //autoUpdater.emit('checking-for-update')
 
   } else {
     //If the app is packed then check for updates and implement promise logic on check for updates. 
     try {
-      // Wait for the autoUpdater to finish
-        //way to make sure autoupdate is done before loading rest of program
+      const updateStatus = await waitForAutoUpdate;
+      updateScreen.close();
 
-      await waitForAutoUpdate;
-
-      // Call your splash screen and the rest of the initialization
-      createLoadingSplashScreen();
-
-
+      console.log(updateStatus); // "No update available" or "Update downloaded"
     } catch (error) {
-      console.error('Error during auto update:', error);
-      // Handle errors or perform fallback actions
-      onErrorStartup();
+      console.error('Update process encountered an error:', error);
     }
   }
 
-  //The rest is basically from the Github code template
+
+  createLoadingSplashScreen()
+
   //waits for a loading screen
   const emitSplashEvent = async (event, data) => {
-  try {
-  await loadingSplashScreen.webContents.send(event, data)
-  } catch (e) {}
+    try {
+      await loadingSplashScreen.webContents.send(event, data)
+    } catch (e) { }
   }
 
   // pass the loading events down to the loadingSplashScreen window
   const progressCallback = async (event) => {
-  await emitSplashEvent('start-webserver-event', event)
+    await emitSplashEvent('start-webserver-event', event)
+
   }
 
   //If we encounter an error after startup (and main window isn't called), we call the error splash screen
   const onErrorLater = async () => {
-  if (!mainWindow) { // fired when we quit the app
-  return
-  }
-  createErrorScreen()
-  await errorSplashScreen.show()
-  mainWindow.destroy()
+    if (!mainWindow) { // fired when we quit the app
+
+      return
+    }
+    createErrorScreen()
+    await errorSplashScreen.show()
+    mainWindow.destroy()
   }
 
   //If we encounter an error on startup, we call the error splash screen
   const onErrorStartup = async () => {
-  await waitFor(1000) // TODO: hack, only emit if the loading screen is ready
-  await emitSplashEvent('failed')
+    await waitFor(3000) // TODO: hack, only emit if the loading screen is ready
+    await emitSplashEvent('failed')
   }
 
   //attempt to start shiny server
   //passes the attempt number, progress callback, error startup callback, error later callback, and on success callback
   try {
-  await tryStartWebserver(0, progressCallback, onErrorStartup, onErrorLater, (url) => {
-  //if successful, create window, destroy screen, and show main window
-  createWindow(url)
-  loadingSplashScreen.destroy()
-  loadingSplashScreen = null
-  mainWindow.show()
-  console.log("This is a different log message from the main process");
+    await tryStartWebserver(0, progressCallback, onErrorStartup, onErrorLater, (url) => {
+      //if successful, create window, destroy screen, and show main window
+      console.log("create event");
+      //pass a 'successs' message to the loading screen
 
-  })
+      //wait for 4 seconds to show the loading screen
+
+      createWindow(url)
+      loadingSplashScreen.destroy()
+      loadingSplashScreen = null
+      // Maximize the window before showing it
+      mainWindow.maximize();
+      mainWindow.show()
+      //console.log("This is a different log message from the main process");
+
+    })
   } catch (e) {
-  await emitSplashEvent('failed')
+    await emitSplashEvent('failed')
   }
 
 })
@@ -374,28 +564,28 @@ app.on('ready', async () => {
 
 // Quit when all windows are closed.
 app.on('window-all-closed', () => {
-// On OS X it is common for applications and their menu bar
-// to stay active until the user quits explicitly with Cmd + Q
-// if (process.platform !== 'darwin') {
-// }
-// We overwrite the behaviour for now as it makes things easier
-// remove all events
+  // On OS X it is common for applications and their menu bar
+  // to stay active until the user quits explicitly with Cmd + Q
+  // if (process.platform !== 'darwin') {
+  // }
+  // We overwrite the behaviour for now as it makes things easier
+  // remove all events
 
   shutdown = true
 
-  if (process.platform !== 'darwin') {app.quit();}
+  if (process.platform !== 'darwin') { app.quit(); }
 
   // kill the process, just in case
   // usually happens automatically if the main process is killed
   try {
-  rShinyProcess.kill()
-  } catch (e) {}
+    rShinyProcess.kill()
+  } catch (e) { }
 })
 
 app.on('activate', () => {
-//if (BrowserWindow.getAllWindows().length == 0) createWindow();
+  //if (BrowserWindow.getAllWindows().length == 0) createWindow();
 
-// On OS X it's common to re-create a window in the app when the
+  // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (mainWindow === null) {
     createWindow()

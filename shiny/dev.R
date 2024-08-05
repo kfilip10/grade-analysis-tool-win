@@ -257,3 +257,34 @@ set_canvas_token(canvas_api_token)
 set_canvas_domain(domain)
 
 g <- get_course_list() %>% select(id)
+
+
+
+
+#### Dynamic Table Testing 4AUG ####
+
+#finds the year within the parenthesis
+course_list_df <-  course_list_df%>%mutate(tableUI_year = str_extract(name, "\\b\\d{4}-[12](?=-)"))
+
+#finds the name right after the parenthesis
+course_list_df <-  course_list_df%>%  mutate(tableUI_course = str_extract(name, "^[^(]+"))
+
+#Finds the four digit alphanumeric hours number
+course_list_df <- course_list_df %>%
+  mutate(tableUI_hours = str_extract(name, "\\b[A-Z0-9]{4}\\b(?=\\s+\\d+)"))
+
+# Extract the numeric pattern following the alphanumeric code
+course_list_df <- course_list_df %>%
+  mutate(tableUI_section = str_extract(str_extract(name, "\\b[A-Z0-9]{4}\\b\\s+\\d+"), "\\d+"))
+
+hours <- course_list_df$name %>% str_extract("\\b[A-Z0-9]{4}\\b\\s+\\d+")
+# extract the section from hours, which is the ending numeric
+section <- str_extract(hours, "\\d+\\s*$")
+
+course_list_df <- course_list_df %>%
+  mutate(tableUI_section = section)
+hours <- str_extract(hours, "\\b[A-Z0-9]{4}\\b")
+course_list_df <- course_list_df %>%
+  mutate(tableUI_hours = hours)
+
+

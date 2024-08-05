@@ -16,7 +16,7 @@ get_like_assignments <- function(course.df){
   assignments.common <- Reduce(intersect, lapply(assignments, function(x) x$name))
   
   #if it is 0 then stop and tell the user (prevents errors downstream)
-  if(length(assignments.common) == 0) {return("No common assignments found for the selected courses.")}
+  if(length(assignments.common) == 0) {return(NULL)}
   #filter the assignments list to only include the common assignments
   assignments.common.df <- lapply(assignments, function(x) x[x$name %in% assignments.common,])
   #combines the assignment lists into one dataframe

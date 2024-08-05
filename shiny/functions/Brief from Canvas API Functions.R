@@ -4,10 +4,98 @@
 #takes a version number, the grade breaks, grades, and a version color
 #returns a list of dataframe elements pertaining for that version of the exam
 
+import_WPR_excel <- function(list.df,numberVersions){
+  #This gets the df list element for each version and pulls the required
+  #data from the header and reformats the data to be clean
+  gb <- list()
+  
+  for (i in 1:numberVersions){
+    list.el <- parse_version(list.df[[i]], i,version.palette[[i]])
+    gb[[i]] <- list.el
+    rm(list.el)
+  }
+  
+  #gb is
+  # big summary table with all students
+  # version header info
+  
+  #combines for summary df and question df
+  # df.total is used for the summary data
+  # df.q dataframe is used for the question data
+  # df.q needs an entry for every student that took times the number of problems (247x8x2 roughly 3705)
+  # question, score, concept, cut.page, max (points), v.label ("Version 1"), version (num)
+  #i=1
+  df.roster <- gb[[1]][[3]]
+  #df.roster2 <- gb[[1]][[4]]
+  
+  #browser()
+  did_not_take_any_exam <- df.roster$Name
+  
+  for(i in 1:numberVersions){
+    df <- gb[[i]][[1]]
+    df.head <- gb[[i]][[2]]
+    
+    #df total summarization
+    if(i==1){
+      df.total <- df %>% 
+        select(ID,Section,Name,version,pre.grade,pre.percent,post.grade,post.percent,mge.percent,mge.grade,mge.points)
+    }else{
+      df.total <- rbind(df.total,gb[[i]][[1]]%>% select(ID,Section,Name,version,pre.grade,pre.percent,
+                                                        post.grade,post.percent,mge.percent,mge.grade,mge.points))
+    }
+    vec.questions <- df.head$question
+    
+    df.q.t <- df %>% select(all_of(vec.questions))%>% pivot_longer(cols=all_of(vec.questions),names_to="question",values_to="score")
+    
+    df.q.t <- left_join(df.q.t,df.head,by="question")
+    df.q.t$v.label <- str_c("Version ", i)
+    df.q.t$version <- i
+    
+    if(i==1){
+      df.q <- df.q.t
+    }else{
+      df.q <- rbind(df.q,df.q.t)
+      rm(df.q.t)
+    }
+    
+  }
+  df.total$pre.percent <-df.total$pre.percent*100 
+  df.total$post.percent <-df.total$post.percent*100 
+  df.total$mge.percent <-df.total$mge.percent*100 
+  did_not_take_any_exam <- did_not_take_any_exam[!(did_not_take_any_exam %in% df.total$Name)]
+  
+  #retrieve the section from df.roster for each element in did_not_take_any_exam
+  no.entries <- df.roster[df.roster$Name %in% did_not_take_any_exam,]
+  df.q$percent <- df.q$score/df.q$max
+  df.q$grade <- sapply(df.q$percent,letter_grade,breaks,grades)
+  df.q$percent <-     df.q$percent*100
+  
+  #Need to look at the 
+  
+  #find duplicates in df.total Student NAME
+  duplicate.entries <- df.total[duplicated(df.total$ID),]
+  dup.entries.df <- df.roster[df.roster$Name %in% duplicate.entries$Name,]
+  
+  #browser()
+  #left join df.total and df.roster by ID
+  df.total <- left_join(df.total,df.roster%>%select(ID,Course.ID,Assignment.ID),by="ID")
+  list.df=list()
+  list.df[[1]] <- df.total
+  list.df[[2]] <- df.q
+  list.df[[3]] <- dup.entries.df #these will be those that are in both versions
+  list.df[[4]] <- no.entries #this will be those that are in neither version
+  
+  
+  return(list.df)
+}
+
+
+
+
 parse_version <- function(df,versionNum,vers.color) {
   #takes the dataframe
-
   # Find the row that has ID in it
+  #browser()
   row_ID <- which(apply(df, 1, function(row) any(row == "ID")))
   row_Section<- which(apply(df, 1, function(row) any(row == "Section")))
   if(row_ID==row_Section){
@@ -24,6 +112,10 @@ parse_version <- function(df,versionNum,vers.color) {
   concept_ID.col <- which(apply(df.vers.header, 1, function(col) any(grepl("concept", col, ignore.case = TRUE))))
   
   total.col <- which(grepl("Total", df.data.colNames, ignore.case = TRUE))[1]
+  
+  #max score for the exam, reads direct from excel in case we want
+  #bonus points to be an option
+  mge.max <- as.numeric(df.vers.header[[3,total.col]])
   
   #remove all columns after total from df.vers.header
   df.vers.header <- df.vers.header[,1:total.col-1]
@@ -58,53 +150,58 @@ parse_version <- function(df,versionNum,vers.color) {
   col.start <-  which(colnames(df.data)=="ID")[1]
   col.end <- which(colnames(df.data)=="Assignment ID")[1]
   df.data <- df.data[,col.start:col.end]
-  #which(colnames(df.data)=="ID")[1]
-  #df.data[which(colnames(df.data)=="ID")[1]]
-  #extract the ID, section, and student name from df.data
-  #remove all rows that have incomplete data
+  
   course.roster <- data.frame(df.data["ID"],
                               df.data["Instructor"],
                               df.data["Section"],
                               df.data["Name"],
                               df.data["Course ID"],
                               df.data["Assignment ID"])
-  course.roster <- course.roster[complete.cases(course.roster),]
+  #remove entries with NA in the ID column
+  course.roster <- course.roster[!is.na(course.roster$ID),]
   
+  #convert all columns to numeric from just after name until the end
+  col.Numeric<- which(colnames(df.data)=="Name")[1]+1
   
-  df.data <- df.data[complete.cases(df.data),]
-
-  complete.Entries <- nrow(df.data)
-
-  
-  #convert columns with numeric values to numeric
-  col.Section<- which(colnames(df.data)=="Section")[1] -1
-  df.data[,4:col.Section] <- sapply(df.data[,4:col.Section],as.numeric)
-  col.assignment_id<- which(colnames(df.data)=="Assignment ID")[1]
-  
-  df.data[,col.assignment_id] <- sapply(df.data[,col.assignment_id],as.numeric)
-  
+  df.data[,col.Numeric:ncol(df.data)] <- sapply(df.data[,col.Numeric:ncol(df.data)],as.numeric)
   
   #remove rows that have a 0 in the total column from df.data
-  #df.data <- df.data %>% filter(Total!=0)
+  df.data <- df.data %>% filter(Total!=0)
+  #if pre max is NA set it to 1
+  df.data$`Pre Max`[is.na(df.data$`Pre Max`)] <- 1
+  #if pre points is NA set it to 1
+  df.data$`Pre Points`[is.na(df.data$`Pre Points`)] <- 1
   
+  #extract the ID, section, and student name from df.data
+  complete.Entries <- nrow(df.data)
+
+
   #finds any NA values in df.data2 and sets it to 0
   df.data[is.na(df.data)] <- 0
   df.version <- df.data
   
   df.version$version = str_c("Version ", versionNum) #declare version
   
+
   colnames(df.version)[colnames(df.version) == "Total"] <- "mge.points"
   colnames(df.version)[colnames(df.version) == "Pre Points"] <- "pre.points"
   colnames(df.version)[colnames(df.version) == "Pre Max"] <- "pre.max"
+  
+  #### Points calculating ####
+  ##This fixes an error where it can't calculate the scores if the canvas instructor hasn't uploaded grades yet
+  #if pre.points is NA, set it to 1
+  df.version$pre.points[is.na(df.version$pre.points)] <- 1
+  #if pre.max is NA set it to 1
+  df.version$pre.max[is.na(df.version$pre.max)] <- 1
   
   df.version$pre.percent = df.version$pre.points/df.version$pre.max # calc post percent
   
   df.version$pre.grade = sapply(df.version$pre.percent,letter_grade,breaks,grades) #apply grade function
   
-  df.version$mge.percent = df.version$mge.points/sum(df.vers.header$max) # calc MGE percent
+  df.version$mge.percent = df.version$mge.points/mge.max # calc MGE percent
   df.version$mge.grade = sapply(df.version$mge.percent,letter_grade,breaks,grades) #apply grade function
   
-  df.version <-  df.version %>% mutate(post.max= df.version$pre.max+sum(df.vers.header$max),
+  df.version <-  df.version %>% mutate(post.max= df.version$pre.max+mge.max,
                                        post.score = df.version$pre.points + df.version$mge.points)
   
   df.version$post.percent = df.version$post.score/df.version$post.max # calc pre percent
@@ -119,98 +216,6 @@ parse_version <- function(df,versionNum,vers.color) {
 }
 
 
-import_WPR_excel <- function(list.df,numberVersions){
-  #This gets the df list element for each version and pulls the required
-  #data from the header and reformats the data to be clean
-  gb <- list()
-  
-  for (i in 1:numberVersions){
-    list.el <- parse_version(list.df[[i]], i,version.palette[[i]])
-    gb[[i]] <- list.el
-    rm(list.el)
-  }
-  
-  #gb is
-  # big summary table with all students
-  # version header info
-  
-  #combines for summary df and question df
-  # df.total is used for the summary data
-  # df.q dataframe is used for the question data
-  # df.q needs an entry for every student that took times the number of problems (247x8x2 roughly 3705)
-  # question, score, concept, cut.page, max (points), v.label ("Version 1"), version (num)
-  #i=1
-  df.roster <- gb[[1]][[3]]
-  
-  did_not_take_any_exam <- df.roster$Name
-  
-  for(i in 1:numberVersions){
-    df <- gb[[i]][[1]]
-    df.head <- gb[[i]][[2]]
-    
-    #df total summarization
-    if(i==1){
-      df.total <- df %>% 
-        select(ID,Section,Name,version,pre.grade,pre.percent,post.grade,post.percent,mge.percent,mge.grade,mge.points)
-    }else{
-      df.total <- rbind(df.total,gb[[i]][[1]]%>% select(ID,Section,Name,version,pre.grade,pre.percent,
-                                                        post.grade,post.percent,mge.percent,mge.grade,mge.points))
-    }
-    vec.questions <- df.head$question
-    
-    df.q.t <- df %>% select(all_of(vec.questions))%>% pivot_longer(cols=all_of(vec.questions),names_to="question",values_to="score")
-    
-    df.q.t <- left_join(df.q.t,df.head,by="question")
-    df.q.t$v.label <- str_c("Version ", i)
-    df.q.t$version <- i
-    
-    if(i==1){
-      df.q <- df.q.t
-    }else{
-      df.q <- rbind(df.q,df.q.t)
-      rm(df.q.t)
-    }
-    
-    
-    
-    #df.roster is the entire roster
-    #I just need to find the IDs that are not in df.total
-    #
-    
-    
-    #find the IDs that are in roster but not in df.total
-    
-    
-  }
-  df.total$pre.percent <-df.total$pre.percent*100 
-  df.total$post.percent <-df.total$post.percent*100 
-  df.total$mge.percent <-df.total$mge.percent*100 
-  did_not_take_any_exam <- did_not_take_any_exam[!(did_not_take_any_exam %in% df.total$Name)]
-  
-  #retrieve the section from df.roster for each element in did_not_take_any_exam
-  no.entries <- df.roster[df.roster$Name %in% did_not_take_any_exam,]
-  df.q$percent <- df.q$score/df.q$max
-  df.q$grade <- sapply(df.q$percent,letter_grade,breaks,grades)
-  df.q$percent <-     df.q$percent*100
-  
-  #Need to look at the 
-  
-  #find duplicates in df.total Student NAME
-  duplicate.entries <- df.total[duplicated(df.total$ID),]
-  dup.entries.df <- df.roster[df.roster$Name %in% duplicate.entries$Name,]
-  
-  #browser()
-  #left join df.total and df.roster by ID
-  df.total <- left_join(df.total,df.roster%>%select(ID,Course.ID,Assignment.ID),by="ID")
-  list.df=list()
-  list.df[[1]] <- df.total
-  list.df[[2]] <- df.q
-  list.df[[3]] <- dup.entries.df #these will be those that are in both versions
-  list.df[[4]] <- no.entries #this will be those that are in neither version
-  
-  
-  return(list.df)
-}
 
 
 
@@ -694,7 +699,7 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
   #Get list of unique version labels
   v.label.unique <- unique(df.q$v.label)
   
-  #IF concept grouping is true:
+  #If concept grouping is true:
   df.q$v.label <- factor(df.q$v.label,version.unique)
   df.q$concept <- factor(df.q$concept,concept.unique)
   #concept.exp <- expand.grid(v.label.unique,concept.unique)
@@ -707,6 +712,9 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
   # Then call new function to iterate through questions by version
   #concept.exp <- expand.grid(v.label.unique,numberQuestions)
   #test.list <- apply(concept.exp,1,question_slide_concepts)
+  
+  #factor to preserve question order in brief
+  df.q$question <- factor(df.q$question, levels = unique(df.q$question))
   
   if(sortStyle=="Group By Concept"){
     df.q.list <- split(df.q,f=list(df.q$version,df.q$concept))

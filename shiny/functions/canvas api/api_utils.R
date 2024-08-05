@@ -88,7 +88,7 @@ canvas_query <- function(urlx, args = NULL, type = "GET") {
 
   # Check the response status code
   if (httr::status_code(response) != 200) {
-    stop("Failed to retrieve from Canvas. Please check your authentication and API endpoint.")
+    stop("Failed to retrieve from Canvas. Please check your authentication and API endpoint. URL: ", urlx)
   }
   httr::stop_for_status(resp)
   resp

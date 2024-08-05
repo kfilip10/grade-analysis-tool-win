@@ -47,7 +47,14 @@
 <body>
     <div class="loader-container">
         <div class="loader"></div>
-        <p class="loading-text">An update! <br> Please wait while we apply it.</p>
+        <p id="message">Checking for updates...</p>
     </div>
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        ipcRenderer.on('update-message', (event, message) => {
+            document.getElementById('message').innerText = message;
+        });
+    </script>
 </body>
 </html>

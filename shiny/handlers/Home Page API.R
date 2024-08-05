@@ -19,9 +19,7 @@ createHomePage <- function() {
           tags$li("In the Create Brief tab: Type in your course name, event name, and select a bin width for the histograms in the brief."),
           type="a"
         ),
-        tags$li("Download your briefing and review for completeness."),
-        tags$li(api_test())
-      ),
+        tags$li("Download your briefing and review for completeness.")      ),
       # tags$hr(),
       # h4("Tab details:"
       # ),

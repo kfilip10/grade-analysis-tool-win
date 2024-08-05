@@ -16,6 +16,11 @@ grade_csv_path <- file.path(Sys.getenv("USERPROFILE"),"Documents",settings_folde
 COURSE_DEFAULTS <- "COURSE_DEFAULTS.rds"
 COURSE_DEFAULTS_PATH <- file.path(settings_path,COURSE_DEFAULTS)
 
+#List of assignment data to save for easy reloading
+ASSIGNMENT_DEFAULTS <- "ASSIGNMENT_DEFAULTS.rds"
+ASSIGNMENT_DEFAULTS_PATH <- file.path(settings_path,ASSIGNMENT_DEFAULTS)
+
+
 #This function checks if the GradeThresholds.csv is in the user documents folder, if it isn't then it adds it
 
 

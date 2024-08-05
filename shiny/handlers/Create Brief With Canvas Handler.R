@@ -4,35 +4,40 @@
 createBriefUploadPage <- function() {
   div(
     style=bodystyle,
-    h4("1. Upload Grade data:"),
+    h3("1. Upload Grade data:"),
     tags$p("Upload the WPR template file that you created in the 'Pre-WPR Prep' tab."),
     fileInput("WPRGrades", HTML("<b>WPR Grade Data (.xlsx)</b>"), accept = c(".xlsx")),
     fileInput("cutSheet",HTML("<b>Cut Sheet (.pdf) (optional) </b> <br>
                                       (Leave blank if no cut sheets are desired in final brief) "), accept = c(".pdf")),
-    h5("1a. Select the Excel sheets which correspond to your WPR data:"),
+    h4("1a. Select the Excel sheets which correspond to your WPR data."),
+    tags$p("NOTE: The version numbering in the brief will conform to the 
+       order of the sheets listed below (i.e. first checked version is version 1, second v2, etc.)"),
     uiOutput("checkboxes"),
-    h4("2. Load the excel data into the app using the button below:"),
+    h3("2. Load excel data:"),
     disabled(actionButton("importWPRExcelBtn", "Load Excel Data",style = "background-color: #3498db; color: #ffffff;")),
-  )
+    h3("2a. Duplicate Entries"),
+    p("The following duplicate entries (one cadet with grades in multiple versions:) were found that you should investigate:"),
+    DTOutput("duplicateTable"),
+    h3("2b. Cadets with no Exam Entry"),
+    DTOutput("noEntryTable"),
+    
+    )
   
   
 }
 
 createBriefPage <- function(){
   div(
-    h4("3. Select Parameters"),
+    h3("3. Select Parameters"),
     textInput(inputId="courseTitle", label=HTML("<b>Course name:</b>"), value = "PHYS 201"),
     textInput(inputId="eventTitle", label=HTML("<b>Event name:</b>"), value = "WPR "),
     #removed the bin_width parameter because it wasn't totally needed, left here in case we want it back.
     #numericInput("bin_width", "Select a grade bin width for histograms:",
     #             value = 5, min = 4, max = 10), 
-    h4("4. Create the Grade Brief"),
+    h3("4. Create the Grade Brief"),
     p("Note: You must upload an excel file first"),
     disabled(actionButton("convertBtn", "Create Grade Brief",style = "background-color: #3498db; color: #ffffff;")),
-    h4("5. Check Duplicate Entries"),
-    p("The following duplicate entries (one cadet with grades in multiple versions:) were found that you should investigate:"),
-    tableOutput("duplicateTable"),
-    h4("6. Download the Grade Brief"),
+    h3("5. Download the Grade Brief"),
     disabled(downloadButton("pptDownload", "Download Grade Brief (PPT)",style = "background-color: #3498db; color: #ffffff;"))
   )
 }
@@ -44,7 +49,6 @@ brief_Handler <- function(input, output, session){
   
   #### Create Brief ####
   grades.list <- reactiveValues(dataframes=list())
-  wprGrades.path <- reactiveVal(NULL)
   
   num_versions <- reactiveVal(0)
   #selected_sheets <- reactiveVal(NULL) #Don;t think it is used? 9DEC
@@ -58,16 +62,9 @@ brief_Handler <- function(input, output, session){
     input$eventTitle
   })
   
-  # This will be defunct after I make the canvas combiner
-  output$downloadTemplate <- downloadHandler(
-    filename = function() {
-      file_name <- "Report Test.xlsx"  # Filename for the backup file
-      file_name 
-    },
-    content = function(file) {
-      file_path <- file.path(getwd(),'www', "Report Test.xlsx")      
-      file.copy(file_path, file)
-    })
+  #### Upload Excel ####
+  
+  wprGrades.path <- reactiveVal(NULL)
   
   observeEvent(input$WPRGrades, { 
     req(input$WPRGrades$datapath)
@@ -86,7 +83,11 @@ brief_Handler <- function(input, output, session){
       return(NULL)
     
     sheets <- excel_sheets(inFile)
-    checkboxGroupInput("WPR_sheets", "WPR Grade data:", 
+    #if sheets has a value with "instructions" in it, remove it
+    if(any(grepl("Instructions",sheets))){
+      sheets <- sheets[-grep("Instructions",sheets)]
+    }
+    checkboxGroupInput("WPR_sheets", "Select Versions of WPR to analyze:", 
                        choices = sheets,
                        selected=sheets)
   })
@@ -102,7 +103,7 @@ brief_Handler <- function(input, output, session){
     req(wprGrades.path())
     
     sheets <-  input$WPR_sheets #sheets list from the checkboxes
-    
+    #remove any sheets with "instructions" in the name
     # Store the number of sheets in a reactive variable for further use
     num_versions(length(sheets))
     
@@ -112,21 +113,13 @@ brief_Handler <- function(input, output, session){
       
       list.df <- list()
       versions <- sheets
-      versions <- tolower(versions)
+      #versions <- tolower(versions)
       for(n in 1:length(versions)){
-        sheetN <- match(1,str_detect(versions,as.character(n)))
-        if(is.na(sheetN)){
-          showModal(modalDialog(
-            title = "Important message",
-            "Make sure you only have one sheet for each version and there is a number '1' or 'one' corresponding to the version number in the sheet name."
-          ))
-          break
-        }
-        else {
-          list.df[[n]] <- read_excel(wprGrades.path(),sheetN)}  
+          list.df[[n]] <- read_excel(wprGrades.path(),sheet=versions[n]) 
       }
       df.list <- import_WPR_excel(list.df,num_versions())
       grades.list$dataframes <- df.list
+
       showModal(modalDialog(
         title = "Import Successful",
         HTML(" You may now create the brief from the next tab or view plot data."),
@@ -206,21 +199,46 @@ brief_Handler <- function(input, output, session){
     print(df.vers.sum)
     #head(grades.list$dataframes[[1]])
   })
+
   
-  output$duplicateTable <- renderTable({
-    req(input$WPRGrades$datapath)
-    df <- grades.list$dataframes[[1]]
-    df.dup <- df %>% 
-      group_by(version,ID) %>% summarise("Count"=n(),name=Name,section=Section)
-    df.dup <- df.dup %>% filter(Count>1)
-    if (!is.null(df.dup) && nrow(df.dup) > 0) {
-      df.dup
-    } else {
+  output$duplicateTable <- renderDT({
+    req(!is.null(grades.list$dataframes), length(grades.list$dataframes) >= 3)
+    if (!is.null(grades.list$dataframes)) {
+      datatable(grades.list$dataframes[[3]],options=list(
+        pageLength = 10,  # Set initial number of entries to display
+        autoWidth = TRUE,  # Automatically adjust column width
+        searching = TRUE,  # Enable search box
+        order = list(list(0, 'asc')),  # Initial sorting column (0-based index)
+        lengthMenu = list(c(10, 25, 50, -1), c('10', '25', '50', 'All')),  # Dropdown for page length options
+        columnDefs = list(list(className = 'dt-left', targets = '_all'))  # Left-align all columns
+        
+        ))
+      } else {
       print("No duplicates found")
-      
     }
-  })
+  },server=FALSE)
   
+  
+  output$noEntryTable <- renderDT({
+    req(!is.null(grades.list$dataframes), length(grades.list$dataframes) >= 3)
+    if (!is.null(grades.list$dataframes)) {
+      datatable(grades.list$dataframes[[4]],options=list(
+        pageLength = 10,  # Set initial number of entries to display
+        autoWidth = TRUE,  # Automatically adjust column width
+        searching = TRUE,  # Enable search box
+        order = list(list(0, 'asc')),  # Initial sorting column (0-based index)
+        lengthMenu = list(c(10, 25, 50, -1), c('10', '25', '50', 'All')),  # Dropdown for page length options
+        columnDefs = list(list(className = 'dt-left', targets = '_all'))  # Left-align all columns
+        
+      ))
+    } else {
+      print("All cadets have an exam record.")
+    }
+  },server=FALSE)
+    
+    
+    
+    
   #### Cut sheet reactive ####
   cutSheet <- reactive({
     #req(input$cutSheet)

@@ -42,6 +42,11 @@ ui <- fluidPage(
   theme = bs_theme(version = 4, bootswatch = "flatly"),
   useShinyjs(), #shiny JS used for hiding/showing elements and enables html formatting https://deanattali.com/shinyjs/overview#demo
   #navbarPage - creates a navbar at the top of the page
+  tags$style(HTML("
+    table.dataTable tr.selected td {
+      box-shadow: inset 0 0 9999px #2a7839 !important;  /*Change color and size to your preference */
+    }
+  ")),
   navbarPage(
     id = "navbarID",
     #title and logo. Logo won't load when launching from R Studio, works in deployed app
@@ -107,19 +112,13 @@ ui <- fluidPage(
     tabPanel("FAQ",icon=icon("question"),createFAQPage(),
              )
   ),
-  # Custom CSS to change font size of the bin_width but that is removed for now.
-    # tags$head(
-  #   tags$style(HTML("
-  #     /* Custom CSS to resize numeric input */
-  #     #bin_width[type='number'] {
-  #       width: 50px; /* Change the width to your desired value */
-  #     }
-  #   "))
-  # ),
 )
 
 # Server
 server <- function(input, output, session) {
+  
+
+  
   output$connectivityStatus <- renderText({
     if (checkInternetAccess()) {
       # Internet access is available
@@ -133,6 +132,7 @@ server <- function(input, output, session) {
   
   output$Canvas_data_UI <- renderUI({
   if (input$navbarID == "prep_panel") {
+
     createCanvasPrepPage()
     
   }

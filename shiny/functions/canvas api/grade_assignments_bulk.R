@@ -4,7 +4,7 @@
 # to get the bulk grades posted I need the following in the df:
 #' @param course_id [Integer] id from course roster
 #' @param user_id [Integer] id from course roster
-#' @param assignment_id [Integer] id from assignment list (labelled 'id')
+#' @param assignment_id [Integer] id from assignment list 
 #' @param points [Integer] number of points to assign, labelled in course roster as 'points'
 #' @req dataframe with combined course roster
 #' @req dataframe with combined assignment list
