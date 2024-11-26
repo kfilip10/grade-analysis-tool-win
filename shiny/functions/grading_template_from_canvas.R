@@ -10,6 +10,7 @@
 excel_template_from_canvas <- function(roster.course,assign.df,event.name){
     #roster.course is roster_course_df()
     #assign.df is assignment_list_df()
+    #browser()
     #first I need the list of user IDs, instructors, user.sortable_name,Points,Max points,and the last 8 characters of name
     template.df <- roster.course %>% select(user_id, instructor, user.sortable_name, Points, `Max Points`, course_id, section,section_hour)
     #mutate the name again to remove the last character

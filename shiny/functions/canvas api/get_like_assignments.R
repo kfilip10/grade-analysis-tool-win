@@ -5,10 +5,11 @@ get_like_assignments <- function(course.df){
     
   #get the assignment list for each course
     withProgress(message = "Gathering Assignment Data for All Courses", value=0, {
-    assignments <- lapply(course.df$id, function(x,i){
+    assignments <- lapply(unique(course.df$id), function(x,i){
       incProgress(1/nrow(course.df))
+      #browser()
       get_course_items(course_id = x, item = "assignments") %>%
-        select(id,name,points_possible,assignment_group_id,course_id)},i = seq_along(course.df))
+        select(id,name,points_possible,assignment_group_id,course_id,published)},i = seq_along(course.df))
     })
 
 

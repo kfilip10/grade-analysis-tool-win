@@ -16,6 +16,9 @@ grade_csv_path <- file.path(Sys.getenv("USERPROFILE"),"Documents",settings_folde
 COURSE_DEFAULTS <- "COURSE_DEFAULTS.rds"
 COURSE_DEFAULTS_PATH <- file.path(settings_path,COURSE_DEFAULTS)
 
+SECTION_DEFAULTS <- "SECTION_DEFAULTS.rds"
+SECTION_DEFAULTS_PATH <- file.path(settings_path,SECTION_DEFAULTS)
+
 #List of assignment data to save for easy reloading
 ASSIGNMENT_DEFAULTS <- "ASSIGNMENT_DEFAULTS.rds"
 ASSIGNMENT_DEFAULTS_PATH <- file.path(settings_path,ASSIGNMENT_DEFAULTS)
@@ -50,7 +53,7 @@ breaks[12] <- Inf #top end of range (A+ in course, exceeding 100%)
 
 #### Themes and Styles ####
 #palette for numerous versions of a test. 
-version.palette<-brewer.pal(7,"Dark2")
+version.palette<-brewer.pal(8,"Dark2")
 
 #Some css / style variables
 titlestyle <- " font-size: 22px; /* Change font size */
@@ -66,6 +69,8 @@ bodystyle <- " font-size: 16px; /* Change font size */
                 border: 2px solid #ffffff;/* Add a border */"
 
 
+#### GLobal Parameters ####
+bin.width <- 4
 
 #### Global Functions ####
 #function to source all subfiles

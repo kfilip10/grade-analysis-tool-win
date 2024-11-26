@@ -13,9 +13,11 @@ createCanvasPrepPage <- function() {
   tabPanel("Canvas Data",
            sidebarLayout(
              sidebarPanel(
-                    tags$br(),
-                    uiOutput("tokenStatus"),  # withSpinner(Placeholder for token status
+                    #tags$br(),
+                    #uiOutput("tokenStatus"),  # withSpinner(Placeholder for token status
                     withSpinner(uiOutput("connectionStatus")),
+                    tags$p("If you don't see your section listed, click the 'Refresh Section Data' button:"),
+                    actionButton(inputId="refreshSectionData",label="Refresh Section Data"),
                     h4("Courses Selected:"),
                     uiOutput("selected_courses_list"),
              ),
@@ -40,6 +42,7 @@ createCanvasPrepPage <- function() {
                tags$br(),
                actionButton(inputId = "assignmentShowHide",label = "Show/Hide Assignment List"),
               tags$p("Loading the assignment listing will take approximately 2 seconds per course selected."),
+              ##TODO: Somewhere here I would want to let the user assign a grouping to each of the assignments somehow.
                div(id="assignment_div",
                    uiOutput("assignmentUI")
                ),
@@ -186,6 +189,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
           tags$p(style = "color: white;font-weight: bold;background-color: #6fbd7a;
                                 text-align: center; border-radius: 10px; padding: 5px;",
                  "API Connection Successful!"),
+          #actionButton("reloadCanvasPrep", "Reload Canvas Prep Page", style="color: black; background-color: #cfbb34"),
           h3("Instructions"),
           tags$ol(
             tags$li("First Select the courses you want to collect data from."),
@@ -196,10 +200,14 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
           ),
           tags$hr(),
           )
-      loadSelections()
+      #loadSelections()
     }
   })
-  
+
+  #not used, but possible to add a reload button
+  #reloadCanvasPrep <- observeEvent(input$reloadCanvasPrep,{
+  #  createCanvasPrepPage()
+  #})
   
   #### Course Selection ####
   #hide(id = "div_b")
@@ -208,36 +216,115 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     toggle(id = "course_checkbox_div",anim = T)
   })
   
+    
   #reactive value for the course list only if the connection is successful
   course_list_df <- reactive({
     if (!is.null(connection_status()) && connection_status() == "Success") {
-      course_list_df <- get_course_list()
-      #finds the year within the parenthesis
-      course_list_df <-  course_list_df%>%mutate(term = str_extract(name, "\\b\\d{4}-[12](?=-)"))
+      #check if there is a file at SECTION_DEFAULTS_PATH
+      if(file.exists(SECTION_DEFAULTS_PATH)){
+        #check the date the file was written
+        file_date <- file.info(SECTION_DEFAULTS_PATH)$mtime
+        file_date <- as.Date(file_date)
+        #if it is older than 60 days then ask if they want to reload the data
+        if(Sys.Date()-file_date > 14){
+          #print("File is older than 14 days")
+            load_section_start()
+          } else {
+            #if it is within 60 days then load the data
+            return(readRDS(SECTION_DEFAULTS_PATH))
+          }
+      } else {
+        #if there isn't then get the section list data
+        load_section_start()
+      }
+
       
-      #finds the name right after the parenthesis
-      course_list_df <-  course_list_df%>%  mutate(course = str_extract(name, "^[^(]+"))
-      
-      #finds the four digit hours and section number
-      hours <- course_list_df$name %>% str_extract("\\b[A-Z0-9]{4}\\b\\s+\\d+")
-      # extract the section from hours, which is the ending numeric
-      section <- str_extract(hours, "\\d+\\s*$")
-      
-      course_list_df <- course_list_df %>%
-        mutate(section = section)
-      
-      #extract just the hours from the full string
-      hours <- str_extract(hours, "\\b[A-Z0-9]{4}\\b")
-      
-      course_list_df <- course_list_df %>%
-        mutate(section_hour = hours)
-      course_list_df
     } else {
       NULL
     }
   })
   
 
+  #observe actionbutton to load the section data
+  observeEvent(input$refreshSectionData,{
+    load_section_start()
+  })
+
+  load_section_start<- function(){
+    #course_list_df has the courses
+    #includes: sections - dataframe of sections in each course
+    #total students: total number of students in each course
+    #open a box that says 'Loading course data, please wait' that also has a with progress
+    # Open a modal dialog before loading data
+    showModal(modalDialog(
+      title = "Loading",
+      "Loading course data, please wait...",
+      footer = NULL,
+      easyClose = FALSE
+    ))
+    withProgress(message = 'Loading course data, please wait...', value = 0, {
+      course_list_df <- get_course_list(include=c("sections","total_students","term"))
+
+    
+    sections <- lapply(course_list_df$id,function(x){
+      incProgress(1/length(unique(course_list_df$id)), 
+                  detail = paste("Loading course data for course", x))
+      get_section_info(x,include = "total_students")
+      
+    })
+    
+    
+    #end_time <- Sys.time()
+    #end_time - start_time
+    sections.comb <- bind_rows(sections)
+    
+    #filter no student courses and non-USMA courses
+    sections.comb <- sections.comb %>% filter(!total_students == 0, !is.na(sis_section_id))
+    #browser()
+    ##Creating dataframe of sections##
+    #'name' - section name 
+    #'total_students' - total number of students enrolled in the section
+    #'section_id' section id from get_section_info 'id'
+    # rename id in sections to section_id
+    names(sections.comb)[names(sections.comb) == "id"] <- "section_id"
+    #'#'id' course id - from id
+    names(sections.comb)[names(sections.comb) == "course_id"] <- "id"
+    
+    #'course' course name extracted from name
+    sections.comb <- sections.comb %>% mutate(course = str_extract(sis_section_id, "[A-Z]{2}[0-9]{3}"))
+    
+    #'# 'term' - from course_list_df term.name 
+    #Extract the term from course_list_df term.name by matching id 
+    sections.comb <- sections.comb %>% left_join(course_list_df %>%select(id,term.name), by = "id") 
+    names(sections.comb)[names(sections.comb) == "term.name"] <- "term"
+    
+    hours <- sections.comb$name %>% str_extract("\\b[A-Z0-9]{4}\\b\\s+\\d+")
+    section <- str_extract(hours, "\\d+\\s*$")
+    hours <- str_extract(hours, "\\b[A-Z0-9]{4}\\b")
+    #If section is 'NA' then label as 'NA'
+    # 'section_hour' - extracted hour from section name 'A1B1'
+    # 'section' - section number from section name '3' or '4'
+    sections.comb <- sections.comb %>% mutate(section_hour = hours, section = section)
+    sections.comb <- sections.comb %>% mutate(instr_name = str_extract(name, "(?<=-)[^-]+$"))
+    #returns sections.comb
+    #'name' - section name 
+    #'id' course id - from id
+    #'course' course name extracted from name
+    #'total_students' - total number of students enrolled in the section
+    #'section_id' section id from get_section_info 'id'
+    #'# 'term' - from course_list_df term.name 
+    # 'section_hour' - extracted hour from section name 'A1B1'
+    # 'section' - section number from section name '3' or '4'
+    # 'instr_name' - name of instructor from section name
+    })
+    removeModal()
+    #save sections.comb to section_defaults_path defined in global.r
+    saveRDS(sections.comb, SECTION_DEFAULTS_PATH)
+    return(sections.comb)
+    
+    
+    
+  }
   
   #assignment group lookup table
   assign.group.comb <- reactive({
@@ -265,13 +352,20 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
 
   #### Course Selection - Datatable w. Filters ####
   output$courseCheckboxUITable <- DT::renderDataTable({
+    course_data <- course_list_df()  # Retrieve reactive
+    # Check if the reactive data is not NULL
+    if (is.null(course_data)) {
+      return(NULL)  # Do nothing if the data is NULL
+    }    
     datatable(
-      course_list_df() %>%select(course,section_hour,section,term,id),
+      course_list_df() %>%select(course,section_hour,section,term,id,total_students,instr_name),
       colnames = c(
+        "Term" = "term",
         "Course" = "course",
+        "Instructor" = "instr_name",
         "Hours" = "section_hour",
         "Section" = "section",
-        "Term" = "term",
+        "Students" = "total_students",
         "ID" = "id"
       ),
       selection = 'multiple',  # Enable multiple selection
@@ -385,11 +479,50 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     #require selected courses to be not NULL
     req(selected_courses())
     #if the connection is successful, then load the assignments
+    showModal(modalDialog(
+      title = "Loading",
+      "Loading assignment data, please wait...",
+      footer = NULL,
+      easyClose = FALSE
+    ))
+    
     if (!is.null(connection_status()) && connection_status() == "Success" && 
         !is.null(selected_courses()) && length(selected_courses()) > 0) {
       #get the assignments
-      df <- get_like_assignments(course_list_df()%>%filter(name %in% selected_courses()$name))
-      assignment_list_df(df)
+      #Fix this so that it isnt duplicated
+      #browser()
+      course_list <- course_list_df()
+      df <- get_like_assignments(course_list%>%filter(name %in% selected_courses()$name))
+      
+      removeModal()
+      #set the first assignment to unpublished = false for debug purposes
+      #df$published[1] <- FALSE
+      #check if there are assignments with published = FALSE
+      #if there are, then show a message
+      unpublished_assignments <- df %>% filter(published == FALSE)
+      if (nrow(unpublished_assignments) > 0) {
+        showModal(modalDialog(
+          title = "Unpublished Assignments Message",
+          tagList(
+            p("Some assignments are not published and will not be listed for consolidation. 
+              Please publish them in Canvas and then come back."),
+            tags$ul(
+              lapply(unpublished_assignments$name, function(assignment) {
+                tags$li(assignment)
+              })
+            )
+          ),
+          easyClose = TRUE,
+          footer = modalButton("Close")
+        ))
+      }
+      
+      published_assignments <- df %>% filter(published == TRUE)
+      
+      #store published assignments
+      assignment_list_df(published_assignments)
+      
+      
       if (is.null(assignment_list_df())) {
         showModal(modalDialog(
           title = "Important Message",
@@ -497,20 +630,25 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       #req(input$assignmentCheckbox)
       #get the rosters for all courses if it hasn't been already
       #browser()
-    
+    showModal(modalDialog(
+      title = "Loading",
+      "Loading Canvas data. This step may take a while, please wait...",
+      footer = NULL,
+      easyClose = FALSE
+    ))
       if(is.null(roster_course_df())){
         #message to user to select assignments
         roster_course_df(get_student_roster(course_list_df()%>%filter(name %in% selected_courses()$name),"instr"))
       }
-      
       roster.course <- roster_course_df()
       roster.course <- roster.course %>% mutate(
         `Max Points`=grades.unposted_current_points/grades.unposted_current_score*100)
       names(roster.course)[6:8] <- c("Score","Grade","Points")
       #roster.course <-  roster.course %>% rename(section = name)
-      
+      #roster.course has 'section_id'
+      #I want to add the 
       loaded_course_df(roster.course)
-
+      #browser()
       #get the assignment list reactive value
       assign.df <- assignment_list_df()
       #get the selected assignments from the checkbox reactive
@@ -521,10 +659,10 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
 
       #get the number of students in each course
       course.enrollment <- roster.course %>% group_by(course_id) %>% summarise(n = n())
-
+      
       #join enrollment to assign.lookup
       assign.df <- assign.df %>%
-        left_join(course.enrollment, by = "course_id")
+        left_join(course.enrollment, by = "course_id") %>% distinct()
 
 
       withProgress(message = "Gathering Assignment Data by User for All Courses From Canvas", value=0, {
@@ -533,16 +671,16 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
         #     incProgress(1/length(unique(assign.df$course_id)))
         #     get_bulk_assignments(x, unique(x$course_id))},i=1:length(unique(assign.df$course_id)))
         
-        #edit from GPT
+        #EDITED THIS DIDN'T TEST on 15SEP
         gb.canvas <- assign.df %>%
-          group_by(course_id) %>%
+        group_by(id) %>% #or can use 'course_id' with distinct(), this was a little faster
+          #distinct () %>%
           group_split() %>%
-          purrr::map_dfr(~{
+          lapply(function(.x) {
             incProgress(1/length(unique(assign.df$course_id)))
             get_bulk_assignments(.x, unique(.x$course_id))
-          })
-        
-        
+          }) %>%
+          bind_rows() 
         
       })
       withProgress(message = "Merging Data", value=0, {
@@ -572,6 +710,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       assign.comb <- assign.group.comb()
       
       assign.comb <- assign.comb %>% select(assignment_group_id,assignment_group_name)
+      ##TODO: Here I can stop the combination and allow the user to manually group the assignments.
       
       setProgress(value = 0.6, message = "Left Join ")
       
@@ -589,11 +728,11 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       roster.course <-roster.course %>% mutate(course_name = str_c(instructor,section,sep = "-"))
       setProgress(value = 0.9, message = "Mutating Data...")
       
-      
-      course.instructor.df <- as.data.frame(roster.course %>% group_by(course_id) %>% 
-                                              select(instructor,section,section_hour,course_name) %>% distinct())
+      #
       #browser()
-      gb.comb.parse <- gb.comb.parse %>% left_join(course.instructor.df, by = "course_id")
+      roster.temp <- roster.course%>%select(user_id,instructor,section,section_hour,course_name)
+      gb.comb.parse <- gb.comb.parse %>% 
+        left_join(roster.temp, by = "user_id")
       
       
       
@@ -615,9 +754,10 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
                         choices = course_gradebook()$assignment_name)
       setProgress(value = 1.0, message = "Finished!")
       #add modal to show that the data has been loaded
+      removeModal()
       showModal(modalDialog(
         title = "Data Loaded",
-        "Canvas Data Loaded Successfully",
+        "Canvas Data Loaded Successfully. You may now download either the gradebook or grading template.",
         easyClose = TRUE,
         footer = NULL
       ))

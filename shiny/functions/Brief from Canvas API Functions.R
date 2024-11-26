@@ -589,7 +589,8 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
     cut.page <- unique(x$cut.page)
     question.num <- unique(x$question)
     concept <- unique(x$concept)
-    incProgress(1/progress.tot, detail = paste("Adding Version ",version.num, "Question ",question.num))
+    incProgress(1/progress.tot, detail = paste("Adding Version ",version.num, "Question ",
+                                               question.num))
     
     
     

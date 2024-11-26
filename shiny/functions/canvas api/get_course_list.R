@@ -17,3 +17,4 @@ get_course_list <- function(user_id = NULL, include = NULL) {
   dat <- process_response(url, args)
   return(unique(dat))
 }
+

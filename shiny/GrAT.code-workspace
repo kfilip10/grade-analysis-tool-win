@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"r.linting.enable": true,
+		"r.linting.maxLineLength": 120
+	}
+}

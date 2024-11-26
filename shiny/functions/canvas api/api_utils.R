@@ -209,7 +209,8 @@ paginate <- function(x, showProgress=T) {
     
     if (n_pages == 1){
       return(first_response)
-    }else-if (n_pages == 100){
+    #}else-if (n_pages == 100){
+    }else{
       return(first_response)
     }
     
