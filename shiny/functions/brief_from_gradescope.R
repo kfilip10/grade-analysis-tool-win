@@ -13,7 +13,6 @@
 # Generate question group slides ----
 # Called from shiny with list of dataframes
 gs_makebriefmain <- function(question_list,cuts_df,cut_filter_threshold,output_file = "question_groups.pptx") {
-  #TODO: Add the logic to actually process the data
   #browser()
   #clean question+list and cut list of underscores
   # remove understores from all the question in cuts_df
@@ -35,7 +34,8 @@ gs_makebriefmain <- function(question_list,cuts_df,cut_filter_threshold,output_f
   for (df_name in names(question_list)) {
     
     question_df <- question_list[[df_name]]
-    ## DEBUGGGG
+    
+    ## DEBUG
     ## question_df = question_df_list[[1]]
     ## question_group_name = names(question_df_list)[1]
     

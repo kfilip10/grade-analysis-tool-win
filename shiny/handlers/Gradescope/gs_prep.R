@@ -19,10 +19,10 @@ gs_prep_ui <- function(){
        h4("Click the button to proceed."),
        actionButton("gs_prep_next", "Confirm and Proceed"),
        
-       h2("Debug shortcut:"),
-       p("This button will load pre-canned data for testing purposes."),
        
        #### DEBUG STEP
+       #h2("Debug shortcut:"),
+       #p("This button will load pre-canned data for testing purposes."),
        #actionButton("gs_brief_shortcut", "Brief Shortcut")
        
      )

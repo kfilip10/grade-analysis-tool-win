@@ -503,7 +503,6 @@ app.on('ready', async () => {
     }
   }
 
-
   createLoadingSplashScreen()
 
   //waits for a loading screen

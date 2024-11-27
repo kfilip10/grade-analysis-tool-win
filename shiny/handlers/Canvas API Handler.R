@@ -478,6 +478,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
   observeEvent(input$loadAssignmentsCanvas, {
     #require selected courses to be not NULL
     req(selected_courses())
+    
     #if the connection is successful, then load the assignments
     showModal(modalDialog(
       title = "Loading",
@@ -492,7 +493,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       #Fix this so that it isnt duplicated
       #browser()
       course_list <- course_list_df()
-      df <- get_like_assignments(course_list%>%filter(name %in% selected_courses()$name))
+      df <- get_like_assignments(course_list%>%filter(id %in% selected_courses()$id))
       
       removeModal()
       #set the first assignment to unpublished = false for debug purposes
@@ -638,7 +639,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     ))
       if(is.null(roster_course_df())){
         #message to user to select assignments
-        roster_course_df(get_student_roster(course_list_df()%>%filter(name %in% selected_courses()$name),"instr"))
+        roster_course_df(get_student_roster(course_list_df()%>%filter(id %in% selected_courses()$id),"instr"))
       }
       roster.course <- roster_course_df()
       roster.course <- roster.course %>% mutate(
@@ -907,7 +908,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
   filteredCourseData <- reactive({
     
     if (length(selected_courses) > 0) {
-      course_list_df() %>% filter(name %in% selected_courses()$name) %>%
+      course_list_df() %>% filter(id %in% selected_courses()$id) %>%
         select(id,name)
       #subset(course_list_df(), name %in% selected_courses())
     } else {

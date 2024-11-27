@@ -53,9 +53,10 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
       withProgress(message = 'Generating brief', value = 0,min=0,max=1, {
         #pdf <- cutSheet()
         
-        #Call function below
-        #browser()
-        gs_data <- readRDS("gs_data.rds")
+        
+        
+        #DEBUG Step
+        #gs_data <- readRDS("gs_data.rds")
         
         #click the gs_data.rds to open it
         #saveRDS(question_df, "test/question_df.rds")

@@ -1,6 +1,6 @@
 {
   "name": "grade-analysis-tool",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "type": "module",
   "description": "Analyzes grades from Canvas, now with (limited) Gradescope support!",
   "main": "src/index.js",
@@ -21,7 +21,8 @@
     "appId": "com.pane",
     "productName": "Grade Analysis Tool",
     "extraResources": [
-      "src/**/*"
+      "src/**/*",
+      "shiny/www/**/*"
     ],
     "directories": {
       "output": "build"
