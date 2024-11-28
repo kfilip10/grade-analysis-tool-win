@@ -19,7 +19,8 @@ gs_cuts_ui <- function(){
     mainPanel(
       h3("Inspect Cuts and Continue"),
       p("Inspect the cut data below or click the button to continue."),
-      actionButton("gs_cuts_next", "Confirm Cuts and Proceed"),
+      actionButton("gs_cuts_next", label = HTML("Confirm and Proceed <span class='arrow-icon'>&rarr;</span>"), 
+                   class = "custom-button"),
       
       h4("Loaded Cut data for reference"),
       DTOutput("summaryTable")      #plotOutput("dist_plot")
@@ -205,21 +206,25 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     )
   })
   observeEvent(input$confirm_gs_cuts, {
+    #TODO: Logic to check data after gs_cuts
     #req(question_groups())
     #compile_questions()
     removeModal()
     
     gs_data$cuts_df <- cuts_df()
-    save_data = list(
-      canvas_api_token = gs_data$canvas_api_token,
-      gs_scoregroups = gs_data$gs_scoregroups,
-      gradebook = gs_data$gradebook,
-      cuts_df = gs_data$cuts_df,
-      brief = gs_data$brief
-    )
-    saveRDS(save_data, file = "gs_data.rds")
-    saveRDS(reactiveValuesToList(gs_data), "gs_data_tolist.rds")
-         
+
+    
+    #DEBUG data before going into brief
+    #
+    #saveRDS(reactiveValuesToList(gs_data), "test/gs_data_tolist.rds")
+    #
+    #df <- gs_data$canvas_roster
+    #df_missing <- gs_data$missing_roster
+    #gs_roster <- gs_data$gs_roster
+    #cuts_df <- gs_data$cuts_df
+    #df_question_groups <- gs_data$df_question_groups
+    #saveRDS(reactiveValuesToList(gs_data), "test/gs_data_complete.rds")
+    
   })
   
   #### CSV process Functions ----

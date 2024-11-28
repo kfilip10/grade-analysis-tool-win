@@ -626,7 +626,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
   
   #This can be used in the plotting function maybe
   course_gradebook <- reactiveVal()
-  
+  canvas_errorlist <- reactiveVal()
   observeEvent(input$load_canvas_data, {
       #req(input$assignmentCheckbox)
       #get the rosters for all courses if it hasn't been already
@@ -639,7 +639,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     ))
       if(is.null(roster_course_df())){
         #message to user to select assignments
-        roster_course_df(get_student_roster(course_list_df()%>%filter(id %in% selected_courses()$id),"instr"))
+        roster_course_df(get_student_roster(course_list_df()%>%filter(id %in% selected_courses()$id),canvas_errorlist,INSTRUCTOR_SEARCH_KEY))
       }
       roster.course <- roster_course_df()
       roster.course <- roster.course %>% mutate(

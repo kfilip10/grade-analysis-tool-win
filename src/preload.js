@@ -1,8 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Expose the IPC methods securely to the renderer
 contextBridge.exposeInMainWorld('electron', {
-  ipcRenderer: {
-    send: (channel, data) => ipcRenderer.send(channel, data),
-    on: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(...args))
-  }
+  sendKillServer: () => ipcRenderer.send('kill-server'),
 });

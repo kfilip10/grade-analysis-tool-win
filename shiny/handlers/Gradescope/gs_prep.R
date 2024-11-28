@@ -17,13 +17,9 @@ gs_prep_ui <- function(){
        h4("Set up Canvas API Token"),
        p("In the settings of this app check you have a current and valid Canvas API token."),
        h4("Click the button to proceed."),
-       actionButton("gs_prep_next", "Confirm and Proceed"),
+       actionButton("gs_prep_next",label = HTML("Confirm and Proceed <span class='arrow-icon'>&rarr;</span>"), 
+                    class = "custom-button"),
        
-       
-       #### DEBUG STEP
-       #h2("Debug shortcut:"),
-       #p("This button will load pre-canned data for testing purposes."),
-       #actionButton("gs_brief_shortcut", "Brief Shortcut")
        
      )
 }
@@ -34,6 +30,8 @@ gs_prep_ui <- function(){
 gs_prep_server <- function(input, output, session,gs_data,gs_wizard_status){
    
    observeEvent(input$gs_prep_next, {
+     #TODO: Check there is a canvas_api_token before proceeding
+     
       showModal(
          modalDialog(
             title = "Confirmation",
@@ -46,14 +44,4 @@ gs_prep_server <- function(input, output, session,gs_data,gs_wizard_status){
       )
    })
    
-   observeEvent(input$gs_brief_shortcut, {
-      #browser()
-      gs_data = readRDS("gs_data.rds")
-      
-      
-      gs_wizard_status$gs_prep <- TRUE
-      gs_wizard_status$gs_canvas <- TRUE
-      gs_wizard_status$gs_cuts <- TRUE
-      gs_wizard_status$gs_brief <- TRUE
-   })
 }

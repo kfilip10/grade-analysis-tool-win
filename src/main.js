@@ -3,6 +3,8 @@
 // Based code from "Copyright (c) 2018 Dirk Schumacher, Noam Ross, Rich FitzJohn" at link above
 // Generally the R server generation is from the base code, but the rest is modified by KTF
 
+
+
 //Imports most of the packages
 import { dialog, app, session, BrowserWindow, ipcMain } from 'electron'
 import path from 'path' //used for __dirname since it isn't available in ESM
@@ -15,7 +17,6 @@ import { randomPort, waitFor, getRPath } from './helpers.js' //helper functions 
 
 const rPath = getRPath(os.platform()) //gets the path for R based on platform
 const __dirname = path.dirname(fileURLToPath(import.meta.url)); //gets the directory name for the current file
-
 
 //Kill processes on relaunch (in case of bad shutdown)
 import e1 from 'child_process'
@@ -61,11 +62,30 @@ function killStoredProcesses() {
 
 
 // Auto updater section
-import pkg from 'electron-updater'
+//import pkg from 'electron-updater'
+//https://www.electron.build/electron-updater.class.appupdater
 
-const { autoUpdater } = pkg; //electron-updater is a common JS module, so we need to import it this way
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const { autoUpdater } = require('electron-updater');
+
+
+
+//set isDev to true for development
+//FIX: DEV MODE
+const isDev = false
+
+if (isDev) {
+  // Useful for some dev/debugging tasks, but download can
+  // not be validated becuase dev app is not signed
+  autoUpdater.updateConfigPath = path.join(__dirname, 'dev-app-update.yml');
+}
+
+//const { autoUpdater } = pkg; //electron-updater is a common JS module, so we need to import it this way
 autoUpdater.autoDownload = true; //automatically download updates
-autoUpdater.autoInstallOnAppQuit = true; //automatically install updates on quit
+//autoUpdater.autoInstallOnAppQuit = true; //automatically install updates on quit
+
 
 //posts log files to AppData/Roaming/APPNAME/Logs
 import log from 'electron-log'; //used for logging funcitonality
@@ -75,80 +95,10 @@ autoUpdater.logger.transports.file.level = 'info';
 
 
 
-/* autoUpdater.on('update-available', (event, releaseNotes, releaseName) => {
-  // Notify user or handle the event
-  //make promise waiting for update to be downloaded
-  const waitForUpdateDownload = new Promise((resolve, reject) => {
-    autoUpdater.on('update-downloaded', resolve);
-    autoUpdater.on('error', reject);
-  });
-
-  // Wait for the update to be downloaded
-  waitForUpdateDownload.then(() => {
-    // Notify the user that the update is ready to be installed
-    if (updateScreen) {
-      updateScreen.webContents.send('update-downloaded');
-    }
-  });
-  
-});
-
-autoUpdater.on('update-not-available', () => {
-//can add code here if needed
-});
-
-autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
-
-  
-});
-
-autoUpdater.on('error', (err) => {
-  if (updateScreen) {
-      updateScreen.webContents.send(err);
-      updateScreen.close();
-  }
-}); */
-
-
 //IPC event handling
-
-ipcMain.on('start-webserver-event', (event, arg) => {
-  if (serverProcess) {
-    console.log('Killing existing server process...');
-    serverProcess.kill();
-  }
-
-  console.log('Starting new server process...');
-  serverProcess = exec('your_server_command', (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Error starting server: ${error.message}`);
-      updateScreen.webContents.send('update-message', { message: 'Failed to start server', error: true });
-      return;
-    }
-    console.log(`Server stdout: ${stdout}`);
-    console.error(`Server stderr: ${stderr}`);
-    updateScreen.webContents.send('update-message', { message: 'Server started successfully', attempt: 1 });
-  });
-
-  serverProcess.on('exit', (code) => {
-    if (code !== 0) {
-      console.log(`Server exited with code ${code}`);
-      updateScreen.webContents.send('update-message', { message: 'Server exited unexpectedly', error: true });
-    }
-  });
-});
-
+// Listen for the 'kill-server' message from the renderer process
 ipcMain.on('kill-server', () => {
-  if (serverProcess) {
-    console.log('Killing server process...');
-    serverProcess.kill();
-    serverProcess = null;
-    updateScreen.webContents.send('update-message', { message: 'Server process killed' });
-  }
-});
-
-ipcMain.on('send-update-message', (event, message) => {
-  updateScreen.webContents.send('update-message', message);
+  console.log('I did it');
 });
 
 
@@ -353,7 +303,8 @@ const createUpdateScreen = () => {
         contextIsolation: false
       }
     });
-    updateScreen.loadFile(path.join(__dirname, 'loading_download copy.html'));
+
+    updateScreen.loadFile(path.join(__dirname, 'loading_download.html'));
 
 
     updateScreen.webContents.once('did-finish-load', () => {
@@ -383,7 +334,7 @@ const createErrorScreen = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', async () => {
+app.on('ready', async () => {  
   killStoredProcesses();
 
   // Set a content security policy
@@ -409,21 +360,13 @@ app.on('ready', async () => {
     // At this point, the updateScreen has finished loading
     console.log("wait is over");
     autoUpdater.checkForUpdatesAndNotify();
-
+  
   } catch (error) {
     console.error('Failed to initialize update screen:', error);
   }
 
-
-
   //This makes a promise in this asynch function that waits for the autoUpdater to finish
   //designed to make sure that the autoUpdater is done before loading the rest of the program
-  // const waitForAutoUpdate = new Promise((resolve, reject) => {
-  //  autoUpdater.on('update-not-available', resolve);
-  //  autoUpdater.on('update-available', resolve);
-  //  autoUpdater.on('error', reject);
-  //});
-
   const waitForAutoUpdate = new Promise((resolve, reject) => {
     let updateTimeout;
 
@@ -458,11 +401,16 @@ app.on('ready', async () => {
       updateScreen.webContents.send('update-message', 'Update downloaded and ready to install.');
 
       try {
-        rShinyProcess.kill()
-      } catch (e) { }
-      app.quit();
+        if (rShinyProcess) {
+          rShinyProcess.kill();
+          console.log('R Shiny process killed successfully.');
+        }
+      } catch (e) {
+        console.error('Failed to kill R Shiny process:', e);
+      }
+
+      // Ensure `quitAndInstall()` handles quitting and installing
       autoUpdater.quitAndInstall();
-      resolve('Update downloaded');
     });
 
     autoUpdater.on('error', (error) => {
@@ -485,8 +433,8 @@ app.on('ready', async () => {
     // The app is running from the terminal (not packed)
 
     console.log("Launched from terminal, testing updater");
-    //autoUpdater.emit('checking-for-update')
-    //autoUpdater.emit('checking-for-update')
+
+
     updateScreen.close();
 
     //autoUpdater.emit('checking-for-update')
@@ -531,7 +479,7 @@ app.on('ready', async () => {
 
   //If we encounter an error on startup, we call the error splash screen
   const onErrorStartup = async () => {
-    await waitFor(3000) // TODO: hack, only emit if the loading screen is ready
+    await waitFor(500) // TODO: hack, only emit if the loading screen is ready
     await emitSplashEvent('failed')
   }
 
@@ -542,8 +490,6 @@ app.on('ready', async () => {
       //if successful, create window, destroy screen, and show main window
       console.log("create event");
       //pass a 'successs' message to the loading screen
-
-      //wait for 4 seconds to show the loading screen
 
       createWindow(url)
       loadingSplashScreen.destroy()

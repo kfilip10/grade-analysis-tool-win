@@ -1,9 +1,9 @@
 {
   "name": "grade-analysis-tool",
-  "version": "1.6.1",
+  "version": "1.6.4",
   "type": "module",
   "description": "Analyzes grades from Canvas, now with (limited) Gradescope support!",
-  "main": "src/index.js",
+  "main": "src/main.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/kfilip10/grade-analysis-tool-win.git"
@@ -21,8 +21,7 @@
     "appId": "com.pane",
     "productName": "Grade Analysis Tool",
     "extraResources": [
-      "src/**/*",
-      "shiny/www/**/*"
+      "src/**/*"
     ],
     "directories": {
       "output": "build"

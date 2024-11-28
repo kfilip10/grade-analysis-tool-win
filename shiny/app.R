@@ -42,6 +42,8 @@ sourceAllFilesInFolder(file.path(getwd(), "functions"))
 # loads the files in the functions folder
 sourceAllFilesInFolder(file.path(getwd(), "functions", "canvas api"))
 
+sourceAllFilesInFolder(file.path(getwd(), "functions", "canvas UI and local functions"))
+
 # Changes max file upload size to 30 MB
 # Runs the function to check if the grade csv exists 
 #also makes the settings folder
@@ -71,6 +73,22 @@ ui <- fluidPage(
     background-color: #2a7839 !important; /* Green background */
     color: white !important;             /* White text */
     }
+     .custom-button {
+        background-color: #007BFF; /* Bootstrap primary color */
+        color: white;
+        font-size: 16px;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .custom-button:hover {
+        background-color: #0056b3;
+      }
+      .arrow-icon {
+        margin-left: 10px;
+        font-weight: bold;
+      }
   ")),
   ),
   
@@ -110,8 +128,7 @@ ui <- fluidPage(
              value = "canvas_panel",
              icon = icon("cloud", lib = "glyphicon"),
              tabsetPanel(
-               tabPanel("Canvas Gradebook and Template", 
-                        withSpinner(createCanvasPrepPage())), 
+               tabPanel("Canvas Gradebook and Template", withSpinner(createCanvasPrepPage())), 
                tabPanel("Assignment Group Stats", canvas_assignment_viewer()),
                tabPanel("Course grade Stats", canvas_gradebook_viewer()),
                tabPanel(
@@ -178,13 +195,17 @@ server <- function(input, output, session) {
       "Note: Internet access is not available"
     }
   })
+  # Check if the Canvas API token exists
+  canvas_api_token <- reactiveVal( readRDS(canvas_api_token_path) )
   
+
   # Gradescope UI Elements ----
   shinyjs::disable(selector = "a[data-value='gs_scores']")
-  shinyjs::disable(selector = "a[data-value='gs_canvas']")
+  #DEBUG - Disables UI elements for testing
+  #shinyjs::disable(selector = "a[data-value='gs_canvas']")
   shinyjs::disable(selector = "a[data-value='gs_cuts']")
-  shinyjs::disable(selector = "a[data-value='gs_createbrief']")
-  shinyjs::disable(selector = "a[data-value='gs_uploadgrades']")
+  #shinyjs::disable(selector = "a[data-value='gs_createbrief']")
+  #shinyjs::disable(selector = "a[data-value='gs_uploadgrades']")
   
   # Shared reactives for tab completion
   gs_wizard_status <- reactiveValues(
@@ -193,20 +214,21 @@ server <- function(input, output, session) {
     gs_canvas_completed = FALSE,
     gs_cuts_completed = FALSE,
     gs_brief_completed = FALSE
-    
   )
   
   gs_data <- reactiveValues(
     canvas_api_token = NULL, # string read to access
-    gs_scoregroups = NULL, #score groups from gradescope
-    gradebook = NULL, # data frame of grades from canvas
+    gs_question_groups = NULL, #score groups from gradescope
+    gs_roster = NULL,
+    canvas_roster = NULL, # data frame of grades from canvas
+    missing_roster = NULL, # data frame of missing grades
     cuts_df = NULL, # data frame of cuts
     ppt = NULL
   )
   
   gs_prep_server(input, output, session, gs_data,gs_wizard_status)
   gs_scores_server(input, output, session, gs_data,gs_wizard_status)
-  gs_canvas_server(input, output, session, gs_data,gs_wizard_status)
+  gs_canvas_server(input, output, session, gs_data,gs_wizard_status,canvas_api_token)
   gs_cuts_server(input, output, session, gs_data,gs_wizard_status)
   gs_createbrief_server(input, output, session, gs_data,gs_wizard_status)
   gs_updategrades_server(input, output, session, gs_data,gs_wizard_status)
@@ -276,19 +298,8 @@ server <- function(input, output, session) {
     }
   })
   
-  # Check if the Canvas API token exists
-  canvas_api_token <- reactiveVal()
-  
-  observeEvent(input$navbarID, {
-    if (input$navbarID == "canvas_panel") {
-      # Code to update canvas_api_token
-      if (file.exists(canvas_api_token_path)) {
-        canvas_api_token(readRDS(canvas_api_token_path))
-      } else {
-        canvas_api_token(NULL)
-      }
-    }
-  })
+
+
   
   canvasPrep_Handler(input, output, session, canvas_api_token)
   
@@ -297,7 +308,7 @@ server <- function(input, output, session) {
   
   
   # Settings logic and display
-  settings_Handler(input, output, session)
+  settings_Handler(input, output, session,canvas_api_token)
   
   # Brief logic and display
   brief_Handler(input, output, session)

@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Loading</title>
@@ -19,44 +18,11 @@
   <button id="kill-server-button">Kill Server</button>
 
   <script>
-    const { ipcRenderer } = window.electron;
-
-    // Set an initial test message
-    document.getElementById('status').innerText = 'Loading, please wait...';
-
-    let failed = false;
-
-    ipcRenderer.on('update-message', (message) => {
-      console.log('Received update-message:', message);
-
-      // Add a message to the loading screen
-      document.getElementById('status').innerText = message.message;
-
-      // Here we can inform about the loading process
-      if (!failed && message.attempt >= 1) {
-        console.log('Web server attempt taking longer than expected');
-        document.getElementById('status').innerHTML = `
-          <p>It takes longer than expected. Please wait a little more.</p>
-        `;
-      }
-
-      if (message.error) {
-        console.log('Web server failed to start');
-        let el = document.getElementById('status');
-        el.innerHTML = `
-          <h1>Failure</h1>
-          <p>We could not start the shiny application. Please report this issue to the developers of this application.</p>
-        `;
-        document.getElementById('loading-spinner').innerHTML = '';
-        failed = true;
-      }
+    // Add an event listener to the button
+    document.getElementById('kill-server-button').addEventListener('click', () => {
+      // Use the exposed API to send a message to the main process
+      window.electron.sendKillServer();
     });
-
-
-    // Button to kill the server
-    //document.getElementById('kill-server-button').addEventListener('click', () => {
-    //  ipcRenderer.send('kill-server');
-    //});
   </script>
 </body>
 

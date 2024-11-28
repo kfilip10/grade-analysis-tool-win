@@ -30,7 +30,7 @@ stop("Cannot find the grades threshold file. Please close and reopen the program
 
 #### Server ####
 
-settings_Handler <- function(input, output, session) {
+settings_Handler <- function(input, output, session,canvas_api_token) {
   
   #### Settings #### 
   
@@ -146,6 +146,7 @@ settings_Handler <- function(input, output, session) {
     }, error = function(e) {
       saveStatus(paste("Error:", e$message)) # Update status on error
     })
+    canvas_api_token( readRDS(canvas_api_token_path) )
     
     # Close the modal dialog after a delay to allow user to read the message
     #invalidateLater(2000) # 2 seconds delay

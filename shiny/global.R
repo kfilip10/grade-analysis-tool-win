@@ -53,7 +53,7 @@ breaks[12] <- Inf #top end of range (A+ in course, exceeding 100%)
 
 #### Themes and Styles ####
 #palette for numerous versions of a test. 
-version.palette<-brewer.pal(8,"Dark2")
+version_palette<-brewer.pal(8,"Dark2")
 
 #Some css / style variables
 titlestyle <- " font-size: 22px; /* Change font size */
@@ -71,6 +71,7 @@ bodystyle <- " font-size: 16px; /* Change font size */
 
 #### GLobal Parameters ####
 bin.width <- 4
+INSTRUCTOR_SEARCH_KEY <- "instr"
 
 #### Global Functions ####
 #function to source all subfiles

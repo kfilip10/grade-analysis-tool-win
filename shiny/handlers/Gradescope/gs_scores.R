@@ -35,31 +35,49 @@ gs_scores_ui <- function(){
         width = 6,
         h3("3. Proceed to Next Step"),
         p("After grouping your questions click the button to proceed to the next step."),
-        actionButton("gs_scores_next", "Confirm Groups and Proceed")
+        actionButton("gs_scores_next", label = HTML("Confirm and Proceed <span class='arrow-icon'>&rarr;</span>"), 
+                     class = "custom-button")
       )
     ),
     
     ## Main Section: Question Groups and Uploaded Files ---------------------
-    fluidRow(
-      column(
-        width=12,
-        h3("2. Create Question Groups"),
-        p("Drag and drop questions to create groups for analysis."),
-        p("After adding a group rename it by clicking the group name and typing in the question concept being analyzed."),
-      )
+    div(style = "margin-top: 0.5in;",
+        
+    tabsetPanel(
+      tabPanel("Create Question Groups", 
+               
+        fluidRow(
+          column(
+            width=12,
+            h4("Create Question Groups"),
+            p("Drag and drop questions to create groups for analysis."),
+            p("After adding a group rename it by clicking the group name and typing in the question concept being analyzed."),
+          )
+          ),
+        fluidRow(
+          actionButton("add_group", "Add Question Group"),
+          br()
+        ),
+          fluidRow(        
+            uiOutput("groups_ui")
+    ),
+        fluidRow(
+            h3("Questions from Excel, Grouped by Version"),
+            uiOutput("excel_questions_ui")
+        ),
       ),
-    fluidRow(
-      actionButton("add_group", "Add Question Group"),
-      br()
+    tabPanel("Exam Roster",
+             h4("Check Exam Roster"),
+             p("Check the uploaded roster for correctness."),
+            
+            div(id="gs_examroster", #id is for toggling, but not needed on this tab.
+                dataTableOutput("gs_examroster")
+            ),
+    
     ),
-      fluidRow(        
-        uiOutput("groups_ui")
-),
-    fluidRow(
-        h3("Questions from Excel, Grouped by Version"),
-        uiOutput("excel_questions_ui")
+    
     ),
-  
+    ),
   tags$script(HTML("
     function allowDrop(event) {
       event.preventDefault();
@@ -121,6 +139,7 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
   ## Reactives ----
   gs_score_files <- reactiveVal(list())
   question_titles <- reactiveVal(list(pool = list(), groups = list()))
+  
   # Reactive to store dynamic group names
   group_names <- reactiveVal()
   # Reactive list to store question groups
@@ -135,7 +154,13 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
     files = NULL,      # Store file names needing version selection
     versions = list()  # Store selected versions for each file
   )
-
+  
+  #matches of admin info between files that don't contain a number
+  admin_matches <- reactiveVal()
+  
+  #roster data from excel
+  gs_roster <- reactiveVal()
+  
   ## Input Excel File ----
   observeEvent(input$gs_score_files, {
     # browser()
@@ -164,17 +189,24 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
     initial_pool <- setNames(lapply(files_data, function(f) f$headers), 
                              sapply(files_data, function(f) f$name))
     
+    #filter out headers that start with a number
+    admin_pool <- lapply(initial_pool, function(x) x[!grepl("^[0-9]", x)])
+    #combine admin pool for those that match, this is used later
+    admin_matches(reduce(admin_pool,intersect))
+    
+    
     #filter out headers that don't start with a number, gradescope Qs start with a number
-    initial_pool <- lapply(initial_pool, function(x) x[grepl("^[0-9]", x)])
+    question_pool <- lapply(initial_pool, function(x) x[grepl("^[0-9]", x)])
     df <- question_titles()
     #list of the question titles (from the headers)
-    question_titles(list(pool = initial_pool, groups = list()))
+    question_titles(list(pool = question_pool, groups = list()))
   })
   
   ## Excel version selector ----
   # Function to show a modal for selecting a version
   modal_excelversionselector <- function(index) {
     file_name <- file_versions$files[index]
+    #read the excel file for htis index
     showModal(modalDialog(
       title = paste("Select Version for File:", file_name),
       selectInput(
@@ -189,14 +221,36 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
       easyClose = FALSE
     ))
   }
+  
+  
   observeEvent(input$confirm_excel_version, {
     # Get the current file index needing version selection
     current_index <- length(file_versions$versions) + 1
     file_name <- file_versions$files[current_index]
+    df <- read_excel(input$gs_score_files$datapath[current_index])
+    df <- df%>%mutate(version=input$selected_version)
+    #browser()
+    #I want to select the columnnames that match the admin_matches
+    matches <- as.character(admin_matches())
+    
+    valid_matches <- intersect(matches, colnames(df))
+    
+    df2 <- df %>% select(all_of(valid_matches),version)
+    
+    #find the column that has a column containing 'score' 
+    score_col <- grep("score", colnames(df2), value = TRUE, ignore.case = TRUE)
+    
+    #remove NA entries in the score column
+    df2 <- df2 %>% filter(!is.na(!!sym(score_col)))
+    #sym(score_col): Converts the column name (as a string) into a symbol that dplyr can interpret as a column reference.
+    #!!: Unquotes the symbol, allowing it to be evaluated as a column name within filter().
+    
+    gs_roster(rbind(gs_roster(),df2))
     
     # Save the selected version
     file_versions$versions[[file_name]] <- input$selected_version
-    
+
+        # Load the names 
     # Remove the modal
     removeModal()
     
@@ -539,8 +593,29 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
     
     question_titles(current_questions)
   })
+  
+  ## Roster Table output----
+  output$gs_examroster <- DT::renderDataTable({
+    #browser()
+    req(gs_roster())
+    df <- gs_roster()
+    df
+    
+  })
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   ## 'Next' button ----
   observeEvent(input$gs_scores_next, {
+    #TODO: Check there are question groups before proceeding
+    
     #req(question_groups())
     #compile_questions()
     showModal(
@@ -610,8 +685,10 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
     question_list <- lapply(question_list, function(df) na.omit(df))
     question_list <- question_list[!sapply(question_list, is.null)]
     
-    gs_data$gs_scoregroups <- question_list
+    gs_data$gs_question_groups <- question_list
     
+    gs_data$gs_roster <- gs_roster()%>% rename(sis_user_id = SID)
+
   })
 }
 
