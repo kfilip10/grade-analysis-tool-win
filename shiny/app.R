@@ -97,7 +97,8 @@ ui <- fluidPage(
     id = "navbarID",
     # title and logo. Logo won't load when launching from R Studio, works in deployed app
     title = div(
-      img(src = "PANE.png", height = "35px", width = "30px", style = "margin-right: 10px;"),
+      img(src = "PANE.png", height = "35px", width = "30px", 
+          style = "margin-right: 10px;"),
       "Grade Report Generator"
     ),
     # Makes the home page. createHomePage() is in the handlers folder
@@ -105,7 +106,7 @@ ui <- fluidPage(
              icon = icon("home"), createHomePage(),
              textOutput("connectivityStatus"),
 
-             # icons from: https://www.w3schools.com/bootstrap/bootstrap_ref_comp_glyphs.asp
+    # icons from:https://www.w3schools.com/bootstrap/bootstrap_ref_comp_glyphs.asp
     ),
     ### Gradescope Page----
     tabPanel("Brief from Gradescope",
@@ -113,12 +114,12 @@ ui <- fluidPage(
              icon = icon("fire", lib = "glyphicon"),
              tabsetPanel(
                id = "gradescope_tabs", # Add an id here
-               tabPanel("Preparation",value="gs_prep",gs_prep_ui()),
-               tabPanel("Input Scores",value="gs_scores", gs_scores_ui()),
-               tabPanel("Access Canvas",value="gs_canvas", withSpinner(gs_canvas_ui())),
-               tabPanel("Input Cut Data",value="gs_cuts", gs_cuts_ui()),
-               tabPanel("Make the Brief",value="gs_createbrief", gs_createbrief_ui()),
-               tabPanel("Upload Scores to Canvas",value="gs_uploadgrades", gs_updategrades_ui())
+               tabPanel("Preparation",value = "gs_prep",gs_prep_ui()),
+               tabPanel("Input Scores",value = "gs_scores", gs_scores_ui()),
+               tabPanel("Access Canvas",value = "gs_canvas", withSpinner(gs_canvas_ui())),
+               tabPanel("Input Cut Data",value = "gs_cuts", gs_cuts_ui()),
+               tabPanel("Make the Brief",value = "gs_createbrief", gs_createbrief_ui()),
+               tabPanel("Upload Scores to Canvas",value = "gs_uploadgrades", gs_updategrades_ui())
              )
     ),
     
@@ -128,7 +129,9 @@ ui <- fluidPage(
              value = "canvas_panel",
              icon = icon("cloud", lib = "glyphicon"),
              tabsetPanel(
-               tabPanel("Canvas Gradebook and Template", withSpinner(createCanvasPrepPage())), 
+               tabPanel("Canvas Gradebook and Template",
+                        value="canvas_gradebook", 
+                        withSpinner(createCanvasPrepPage())), 
                tabPanel("Assignment Group Stats", canvas_assignment_viewer()),
                tabPanel("Course grade Stats", canvas_gradebook_viewer()),
                tabPanel(
@@ -200,12 +203,12 @@ server <- function(input, output, session) {
   
 
   # Gradescope UI Elements ----
-  shinyjs::disable(selector = "a[data-value='gs_scores']")
   #DEBUG - Disables UI elements for testing
-  #shinyjs::disable(selector = "a[data-value='gs_canvas']")
+  shinyjs::disable(selector = "a[data-value='gs_scores']")
+  shinyjs::disable(selector = "a[data-value='gs_canvas']")
   shinyjs::disable(selector = "a[data-value='gs_cuts']")
-  #shinyjs::disable(selector = "a[data-value='gs_createbrief']")
-  #shinyjs::disable(selector = "a[data-value='gs_uploadgrades']")
+  shinyjs::disable(selector = "a[data-value='gs_createbrief']")
+  shinyjs::disable(selector = "a[data-value='gs_uploadgrades']")
   
   # Shared reactives for tab completion
   gs_wizard_status <- reactiveValues(
@@ -220,10 +223,14 @@ server <- function(input, output, session) {
     canvas_api_token = NULL, # string read to access
     gs_question_groups = NULL, #score groups from gradescope
     gs_roster = NULL,
+    versions_selected = NULL,
+    score_column = NULL,
+    max_column = NULL,
     canvas_roster = NULL, # data frame of grades from canvas
     missing_roster = NULL, # data frame of missing grades
     cuts_df = NULL, # data frame of cuts
-    ppt = NULL
+    ppt = NULL,
+    upload_roster = NULL
   )
   
   gs_prep_server(input, output, session, gs_data,gs_wizard_status)
@@ -240,6 +247,7 @@ server <- function(input, output, session) {
     removeModal() # Remove the modal
     shinyjs::addClass(selector = "a[data-value='gs_prep']", class = "tab-completed")
     shinyjs::enable(selector = "a[data-value='gs_scores']")
+    gs_wizard_status$gs_prep_completed <- TRUE
     updateTabsetPanel(session, "gradescope_tabs", selected = "gs_scores")
   })
   
@@ -247,6 +255,7 @@ server <- function(input, output, session) {
     removeModal()
     shinyjs::addClass(selector = "a[data-value='gs_scores']", class = "tab-completed")
     shinyjs::enable(selector = "a[data-value='gs_canvas']")
+    gs_wizard_status$gs_scores_completed <- TRUE
     updateTabsetPanel(session, "gradescope_tabs", selected = "gs_canvas")
   })
   
@@ -254,16 +263,18 @@ server <- function(input, output, session) {
     removeModal()
     shinyjs::addClass(selector = "a[data-value='gs_canvas']", class = "tab-completed")
     shinyjs::enable(selector = "a[data-value='gs_cuts']")
+    gs_wizard_status$gs_canvas_completed <- TRUE
     updateTabsetPanel(session, "gradescope_tabs", selected = "gs_cuts")
   })
   
   observeEvent(input$confirm_gs_cuts, {
     shinyjs::addClass(selector = "a[data-value='gs_cuts']", class = "tab-completed")
     shinyjs::enable(selector = "a[data-value='gs_createbrief']")
+    gs_wizard_status$gs_cuts_completed <- TRUE
     updateTabsetPanel(session, "gradescope_tabs", selected = "gs_createbrief")
   })
   
-  observeEvent(input$gs_createbrief_next, {
+  observeEvent(input$confirm_gs_brief, {
     shinyjs::addClass(selector = "a[data-value='gs_createbrief']", class = "tab-completed")
     shinyjs::enable(selector = "a[data-value='gs_uploadgrades']")
     updateTabsetPanel(session, "gradescope_tabs", selected = "gs_uploadgrades")

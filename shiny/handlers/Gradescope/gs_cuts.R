@@ -39,8 +39,9 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
   )
   cuts_df <- reactiveVal(data.frame())
   
-  
-  ##Zip-Modal version ----
+  #allows cuts to only select from the versions that are available
+
+    ##Zip-Modal version ----
   # Modal to have user select version associated with uploads
   # Handle ZIP file upload and extract folder names
   observeEvent(input$cutZipFiles, {
@@ -57,6 +58,10 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     # Unzip each file and collect folder names
     for (i in seq_along(input$cutZipFiles$datapath)) {
       unzip_dir <- file.path(tempDir, paste0("zip_", i))
+      # Remove the directory if it already exists
+      if (dir.exists(unzip_dir)) {
+        unlink(unzip_dir, recursive = TRUE)
+      }
       dir.create(unzip_dir)
       unzip(input$cutZipFiles$datapath[i], exdir = unzip_dir)
       folder_names <- c(folder_names, list.dirs(unzip_dir, recursive = FALSE, full.names = FALSE))
@@ -77,12 +82,22 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
   
   # Function to show a modal for version selection
   show_modal_for_folder <- function(folder_index) {
+    #browser()
+    versions_selected <- unique(gs_data$versions_selected)
+    
+    if(all(is.na(folder_versions$versions))){
+      versionchoices <- versions_selected
+    }
+    else{
+      
+      versionchoices <- setdiff(versions_selected,folder_versions$versions )
+    }
     showModal(modalDialog(
       title = paste("Select Version for Folder:", folder_versions$folders[folder_index]),
       selectInput(
         inputId = "selected_version",
         label = "Version:",
-        choices = 1:9
+        choices = versionchoices
       ),
       footer = tagList(
         actionButton("confirm_cut_version", "Confirm")
@@ -215,9 +230,7 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
 
     
     #DEBUG data before going into brief
-    #
     #saveRDS(reactiveValuesToList(gs_data), "test/gs_data_tolist.rds")
-    #
     #df <- gs_data$canvas_roster
     #df_missing <- gs_data$missing_roster
     #gs_roster <- gs_data$gs_roster
@@ -233,8 +246,14 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     csv_data <- read_csv(file_path, col_types = cols(.default = "c"))
     #browser()
     #find 'point values' row in first column
-    point_values_row <- csv_data[csv_data[[1]] == "Point Values", ]
-    point_values_row_number <- which(csv_data[[1]] == "Point Values")
+    #FUTURE NOTES: If Gradescope updates this format, this will break
+    # find the row that has a near match to "points" in the first column
+    point_values_row <- csv_data[agrepl("point", csv_data[[1]], ignore.case = TRUE), ]
+    
+    #point_values_row <- csv_data[csv_data[[1]] == "Point Values", ]
+    #get the row number 
+    point_values_row_number <- which(csv_data[[1]] == point_values_row[[1]])
+    #point_values_row_number <- which(csv_data[[1]] == "Point Values")
     cut_values <- as.numeric(point_values_row[1, -1])
     
     #first one is point value for question
@@ -242,29 +261,40 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     point_value <- cut_values[1]
     cut_values <- cut_values[-1]
     
+    csv_filtered <- csv_data[1:point_values_row_number-1,]
     
     # Identify columns corresponding to cuts
-    start_col <- which(names(csv_data) == "Submission Time")
-    end_col <- which(names(csv_data) == "Adjustment") - 1
-    cut_columns <- names(csv_data)[(start_col + 1):end_col]
+    # do so by finding columns that have only "true" or "false" in the column
     
-    csv_data <- csv_data[1:point_values_row_number-1,]
+    # Identify columns where every entry is "TRUE" or "FALSE"
+    cut_column_check <- sapply(csv_filtered, function(col) {
+      all(grepl("^(TRUE|FALSE)$", col, ignore.case = TRUE))
+    })
+    
+    # Get the names of these columns
+    cut_columns <- names(cut_column_check[cut_column_check])
     
     # Calculate the percent TRUE for each cut
     cut_summary <- sapply(cut_columns, function(cut_col) {
-      cut_data <- csv_data[[cut_col]]
+      cut_data <- csv_filtered[[cut_col]]
       sum(cut_data == "true", na.rm = TRUE) / (length(cut_data) - 1)
     })
     
     question_name <- basename(file_path)
     question_name <- substr(question_name, 1, nchar(question_name) - 4) # Remove .csv extension
     
+    if(length(cut_values) != length(cut_summary)){
+      #set the cut values to "Unknown" if the number of cuts and cut values do not match
+      cut_values <- rep("Unknown",length(cut_summary))
+    }
+    
     # Build a dataframe with the results
+    
     result <- data.frame(
       version = folder_name,  # Placeholder, will be updated with selected version
       question = question_name,
       points = cut_values,
-      cut_label = cut_columns,
+      cut_label = names(cut_summary),
       cut_percent_true = cut_summary,
       stringsAsFactors = FALSE
     )
@@ -274,6 +304,7 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
   
   # Function to process all CSV files in a directory
   process_all_csvs <- function(base_dir) {
+    
     all_files <- list.files(base_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
     results <- do.call(rbind, lapply(all_files, function(file) {
       folder_name <- dirname(file)

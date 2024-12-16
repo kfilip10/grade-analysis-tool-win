@@ -52,17 +52,26 @@ createCanvasPrepPage <- function() {
                 tags$hr(),
                 h3("4. Download Options"),
                 h4("4a. Download a gradebook of the checkbox assignments above:"),
-                disabled(downloadButton("download_gradebook_canvas", label="Download Canvas Gradebook",
-                                        style="color: black; background-color: #cfbb34")
-                ),
+                ##DEBUG Removed 'disabled' on download button for troubleshooting
+                #disabled(
+                  downloadButton("download_gradebook_canvas", 
+                                 label="Download Canvas Gradebook",
+                                 style="color: black; background-color: #cfbb34"),
+                #),
                 h4("4b. Download a grading template:"),
                 h5("Select which assignment to generate a grading template for:"),
                 uiOutput("templateAssignmentUI"),
-                disabled(downloadButton("download_template_canvas", label = "Download WPR Grading Template",
-                         style="color: black; background-color: #cfbb34"))
-               
-               
-          
+                disabled(downloadButton("download_template_canvas", 
+                                        label = "Download WPR Grading Template",
+                                        style="color: black; background-color: #cfbb34")),
+              #add a large space at the bottom of the page
+              tags$br(),
+              #larger
+              tags$br(),
+              tags$br(),
+              tags$br(),
+              tags$br(),
+              tags$br(),
         )
       )
 )
@@ -219,7 +228,9 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
     
   #reactive value for the course list only if the connection is successful
   course_list_df <- reactive({
-    if (!is.null(connection_status()) && connection_status() == "Success") {
+    if (input$navbarID == "canvas_panel") {
+      if (!is.null(connection_status()) && 
+        connection_status() == "Success") {
       #check if there is a file at SECTION_DEFAULTS_PATH
       if(file.exists(SECTION_DEFAULTS_PATH)){
         #check the date the file was written
@@ -241,6 +252,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       
     } else {
       NULL
+    }
     }
   })
   
@@ -633,18 +645,24 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       #browser()
     showModal(modalDialog(
       title = "Loading",
-      "Loading Canvas data. This step may take a while, please wait...",
+      "Loading Canvas data. This step may take a while. If you are a PH201/202 Course Director 
+      this could take 5-10 minutes if you are loading multiple assignments.",
       footer = NULL,
       easyClose = FALSE
     ))
       if(is.null(roster_course_df())){
         #message to user to select assignments
-        roster_course_df(get_student_roster(course_list_df()%>%filter(id %in% selected_courses()$id),canvas_errorlist,INSTRUCTOR_SEARCH_KEY))
+        roster_course_df(get_student_roster(course_list_df() %>% 
+                                              filter(id %in% selected_courses()$id),
+                                            canvas_errorlist,INSTRUCTOR_SEARCH_KEY))
       }
       roster.course <- roster_course_df()
       roster.course <- roster.course %>% mutate(
-        `Max Points`=grades.unposted_current_points/grades.unposted_current_score*100)
-      names(roster.course)[6:8] <- c("Score","Grade","Points")
+        `Max Points` = grades.unposted_current_points/grades.unposted_current_score*100)
+      #browser() 
+      
+      #This seems to overwrite the email column name
+      names(roster.course)[6:9] <- c("Email","Score","Grade","Points")
       #roster.course <-  roster.course %>% rename(section = name)
       #roster.course has 'section_id'
       #I want to add the 
@@ -667,38 +685,48 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
 
 
       withProgress(message = "Gathering Assignment Data by User for All Courses From Canvas", value=0, {
-        # gb.comb <- assign.df %>% group_by(course_id) %>%
-        #   group_split %>% purrr::map_df(function(x,i){
-        #     incProgress(1/length(unique(assign.df$course_id)))
-        #     get_bulk_assignments(x, unique(x$course_id))},i=1:length(unique(assign.df$course_id)))
-        
-        #EDITED THIS DIDN'T TEST on 15SEP
+        #browser()
+
+        #this is the fastest method by a factor of 2 when using a group by assignment_ids
         gb.canvas <- assign.df %>%
-        group_by(id) %>% #or can use 'course_id' with distinct(), this was a little faster
-          #distinct () %>%
+        group_by(id) %>% 
           group_split() %>%
           lapply(function(.x) {
-            incProgress(1/length(unique(assign.df$course_id)))
+            incProgress(1/length(unique(assign.df$id)))
             get_bulk_assignments(.x, unique(.x$course_id))
           }) %>%
           bind_rows() 
+        #this was the slower, but workable method
+        
+        #so I want to get a list of all the assignments for each course 
+        #Then I can pass a list of assignment_ids all at once in the get_bulk_assignments function
+        # assign_list <- assign.df %>% group_by(course_id) %>% summarise(assignments = list(id))
+        # #apply the get_bulk_assignments function to each course
+        # test_assign <- pmap(assign_list, function(...) {
+        #   x <- list(...)
+        #   get_bulk_assignments2(x[[1]], x[[2]])
+        #   #print(x[[1]]) - course id
+        #  # print(x[[2]]) - list of assignment ids
+        # }) %>%
+        #   bind_rows()    
+        # 
+
         
       })
       withProgress(message = "Merging Data", value=0, {
-        
+      Sys.sleep(0.5)
       gb.comb <- gb.canvas %>% filter(user_id %in% roster.course$user_id)
 
       #match the assignment id to an assignment name
       #add a name column that is based on the name match in assign.lookup by id
       #change the name of id in assign.lookup to assignment_id
       assign.df <-  assign.df %>% rename(assignment_id = id)
-      setProgress(value = 0.25, message = "Rename Data...")
+      setProgress(value = 0.25, message = "Renaming Data...")
       
       gb.comb.parse <- gb.comb %>%
         left_join(assign.df, by = "assignment_id")%>%
         select(user_id,course_id,name,score,points_possible,assignment_group_id)%>%
         mutate(percent = score/points_possible)
-      
 
       setProgress(value = 0.5, message = "Joining Data...")
       
@@ -711,14 +739,21 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       assign.comb <- assign.group.comb()
       
       assign.comb <- assign.comb %>% select(assignment_group_id,assignment_group_name)
-      ##TODO: Here I can stop the combination and allow the user to manually group the assignments.
+      ##TODO: Here I could stop the combination and allow the user to manually group the assignments.
       
       setProgress(value = 0.6, message = "Left Join ")
+      Sys.sleep(0.5)
       
-      gb.comb.parse <- gb.comb.parse %>% left_join(assign.comb, by = "assignment_group_id")
+      gb.comb.parse_dt <- as.data.table(gb.comb.parse)
+      assign.comb_dt <- as.data.table(assign.comb)
+      gb.comb.parse_dt <- merge(gb.comb.parse_dt, 
+                                assign.comb_dt, by = "assignment_group_id", all.x = TRUE)
+      gb.comb.parse <- as.data.frame(gb.comb.parse_dt)
+      
+      #this is hte old join, supposedly slower
+      #gb.comb.parse <- gb.comb.parse %>% left_join(assign.comb, by = "assignment_group_id")
       
       setProgress(value = 0.75, message = "Joining More Data...")
-      
       #this is not a long term solution, but ok for now I guess
       
       #this is the section
@@ -753,6 +788,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       course_gradebook(gb.comb.parse)
       updateSelectInput(session, "select_template_assignment",
                         choices = course_gradebook()$assignment_name)
+
       setProgress(value = 1.0, message = "Finished!")
       #add modal to show that the data has been loaded
       removeModal()
@@ -819,59 +855,149 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
        "gradebook.xlsx"
      },
     content = function(file) {
-      req(input$assignmentCheckbox)
-      #make sure course_gradebook() is not null
-      req(!is.null(course_gradebook()))
+      
+      
       #browser()
+      #DEBUG
+      #saveRDS for testing
+      #saveRDS(course_gradebook(), "test/course_gradebook.rds")
+      #saveRDS(loaded_course_df(), "test/loaded_course_df.rds")
+      #roster.course <- readRDS("test/loaded_course_df.rds")
+      #gb.comb.parse <- readRDS("test/course_gradebook.rds")
+      #names(roster.course)[6:9] <- c("Email","Score","Grade","Points")
+      
+      
+      req(input$assignmentCheckbox)
+      req(!is.null(course_gradebook()))
+      
+      tryCatch({
       roster.course <- loaded_course_df()
 
       gb.comb.parse <- course_gradebook() %>% rename(points = score)
+
       #Pivot wider to get assignment id as columns names
       admin_cols <- c("user_id","course_id","instructor",
                       "section", "section_hour")
       N_admin = length(admin_cols)
       #browser()
+      
+      
+      summary_assign_groups_current <- gb.comb.parse %>%
+        filter(!is.na(points)) %>%  # Remove rows where 'points' is NA
+        group_by(user_id, assignment_group_name) %>%
+        summarise(
+          points = sum(points, na.rm = TRUE),
+          points_possible = sum(points_possible, na.rm = TRUE)
+        ) %>%
+        mutate(percent = points / points_possible)
+      #pivot wider to get the assignment group name as columns
+      
+      gb_sum <- summary_assign_groups_current %>%
+        pivot_wider(names_from = assignment_group_name,
+                    values_from = c(points,points_possible,percent),
+                    names_glue = "{assignment_group_name}_{.value}",
+                    names_sort = TRUE,  # Ensures consistent sorting of names
+                    names_vary = "slowest"  # Ensures columns with the same group name are adjacent
+                    )
+      
+      # this is a better summary for the oml, I'll put this on one sheet.
+      gb_sum <- roster.course %>% select(user_id,
+                                         user.sortable_name,
+                                         Email,
+                                         sis_user_id,
+                                         course_id,
+                                         instructor,section,
+                                         section_hour,
+                                         Score,Grade,
+                                         Points,`Max Points`) %>%
+        left_join(gb_sum, by = "user_id")
+      
+      
       #summarise points, points_possible, and score for each user by assignment_group_name
-      summary_assign_groups <- gb.comb.parse %>% group_by(user_id,assignment_group_name) %>% 
-        summarise(points = sum(points),points_possible = sum(points_possible)) %>% 
-        mutate(percent = points/points_possible)
-      
-      gb.comb.parse <- gb.comb.parse %>% select(-course_name,-assignment_group_id,-assignment_group_name,
-                                                all_of(admin_cols))%>%  
-        pivot_wider(names_from = assignment_name,values_from = c(points,points_possible,percent),
-                                                     names_glue = "{assignment_name}_{.value}",names_sort=TRUE) 
-      
-      gb.comb.parse <- gb.comb.parse %>% select(1:N_admin,order(names(.)[(N_admin+1):ncol(.)])+N_admin)
-      
-      #get the assignment group summaries and add to gb.comb.parse, match by user_id
+      #This shows what they should have in each assignment group (i.e. max points possible)
+      #this will be the same
 
       
-      #pivot asummary assign groups to wide format
-      summary_assign_wide <- summary_assign_groups %>% pivot_wider(names_from = assignment_group_name,
-                                                                   values_from = c(points,points_possible,percent),
-                                                                   names_glue = "{assignment_group_name}_{.value}",names_sort=TRUE)
-      summary_assign_wide <- summary_assign_wide %>% select(1:1,order(names(.)[2:ncol(.)])+1)
+      gb_full <- gb.comb.parse %>%
+        group_by(user_id, assignment_name) %>%  # Group by key variables
+        reframe(
+          points = first(na.omit(points)),  # Take the first non-NA value
+          points_possible = first(na.omit(points_possible)),  # Same for points_possible
+          percent = first(na.omit(percent))  # Same for percent
+        )  %>%
+        pivot_wider(
+          names_from = assignment_name,
+          values_from = c(points, points_possible, percent),
+          names_glue = "{assignment_name}_{.value}",
+          names_sort = TRUE,
+          names_vary = "slowest"
+        )
       
-      gb.comb.parse <- gb.comb.parse %>% left_join(summary_assign_wide, by = "user_id")
-      
+      gb_full <- roster.course %>% select(user_id,user.sortable_name,instructor,section_hour) %>% 
+        left_join(gb_full, by = "user_id")
 
       
-      gb.xl <- roster.course %>% select(user_id,user.sortable_name,email,
-                                   Score,Grade,Points,`Max Points`)  %>% 
-        left_join(gb.comb.parse, by = "user_id")%>% 
-        mutate(Score = Score/100,`Max Points` = round(`Max Points`,digits=1),
-               Points = round(Points,digits=1))
+      
+      gb_sum <- gb_sum %>% 
+        mutate(Score = Score/100,
+               `Max Points` = round(`Max Points`,digits=2),
+               Points = round(Points,digits=2))
       
      # df_renamed <- rename(df, NewName1 = OldName1, NewName2 = OldName2)
-      gb.xl <- rename(gb.xl, ID = user_id, Name = user.sortable_name, `Course ID` = course_id,
-                        Instructor = instructor, Section = section,Hour=section_hour,
-                                Email = email, Score = Score, Grade = Grade, Points = Points,
-                                `Max Points` = `Max Points`)
+      gb_sum <- rename(gb_sum, 
+                       ID = user_id,
+                       CID=sis_user_id, 
+                       Name = user.sortable_name, 
+                       `Course ID` = course_id,
+                        Instructor = instructor, 
+                       Section = section,
+                       Hour=section_hour
+                    )
 
-      gb.xl <- gb.xl %>% select(ID,Name,Email,`Course ID`,Instructor,Section,Hour,
-                                Grade,Score,Points,`Max Points`,everything())
-      #download gb.xl as an xlsx file
-      write.xlsx(gb.xl, file)
+      gb_full <- rename(gb_full, 
+                        ID = user_id, 
+                        Name = user.sortable_name, 
+                       Instructor = instructor, 
+                       Hour=section_hour
+      )
+
+      instructor_sum <- gb_sum %>% group_by(Instructor) %>%
+        summarise(mean_score = mean(Score,na.rm=TRUE),
+                  mean_points = mean(Points,na.rm=TRUE),
+                  mean_max_points = mean(`Max Points`,na.rm=TRUE),
+                  n = n())
+      
+      instructor_courses <- roster.course %>% group_by(course_id) %>% 
+        summarise(count = n(),instructor = first(instructor))
+      
+      
+      wb <- createWorkbook()
+      addWorksheet(wb, "Summary")
+      writeDataTable(wb, "Summary", gb_sum,tableStyle = "TableStyleLight1")
+      
+      addWorksheet(wb, "All Assignments")
+      writeDataTable(wb, "All Assignments", gb_full,tableStyle = "TableStyleLight1")
+      
+      addWorksheet(wb, "Instructor Grades")
+      writeDataTable(wb, "Instructor Grades", instructor_sum, tableStyle = "TableStyleLight1")
+      
+      addWorksheet(wb, "Instructor Courses")
+      writeDataTable(wb, "Instructor Courses", instructor_courses, tableStyle = "TableStyleLight1")
+      
+      
+      saveWorkbook(wb, file, overwrite = TRUE)
+      },
+      error = function(e) {
+        print(e)
+        showModal(modalDialog(
+          title = "Error",
+          paste("An error occurred. Please try again:", e$message),  # Add error message      
+          easyClose = TRUE,
+          footer = NULL
+        ))
+      }
+      )
+      
     })
 
 
@@ -1078,7 +1204,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
      #ID, Name,version,Section, Course.ID,Assignment.ID,mge.points
      grades.df <- upload.list$dataframes[[1]]
      #rename mge.points to points
-     grades.df <- grades.df %>% rename(id=ID,
+     grades.df <- grades.df %>% rename(user_id=ID,
                                        points = mge.points,
                                        course_id = Course.ID,
                                        assignment_id = Assignment.ID)

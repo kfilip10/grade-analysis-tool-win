@@ -5,12 +5,11 @@ createFAQPage <- function() {
   div(
     h3("Frequently Asked Questions"),
     tags$ol(
-      tags$li("How do I get the gradebook data from Canvas?"),
-      tags$par("Navigate to the grades page and click 'export gradebook'. Do not alter the .csv file generated."),
-      tags$li("I forgot to get the gradebook before the WPR, what can I do?"),
-      tags$par("If you have a current gradebook run the report using the current gradebook. Then you will have to manually
-               deduct the WPR total from the 'Pre max' column and the Student's total from the 'Pre points' column. 
-               Then follow the usual instructions to create your brief."),
+      tags$li("Why does my app keep crashing?"),
+      tags$p(
+        "The developer is a pretty terrible coder and also has limited data sets to test with. If you are experiencing routine crashes, contact him at: ",
+        tags$a(href = "mailto:kevin.filip@westpoint.edu", "kevin.filip@westpoint.edu")
+      ) 
     ),
     HTML("<b>Still Need Help?</b>"),
     tags$a("Try seeking further information here", 

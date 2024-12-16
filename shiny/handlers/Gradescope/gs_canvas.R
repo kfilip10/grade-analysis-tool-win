@@ -85,7 +85,9 @@ gs_canvas_server <- function(input, output, session, gs_data,gs_wizard_status,ca
   ## Canvas Courses
   ##   #reactive value for the course list only if the connection is successful
   gs_courselist <- reactive({
-      if(!is.null(gs_connectionstatus()) && gs_connectionstatus() == "Success") {
+      if(!is.null(gs_connectionstatus()) && 
+         gs_connectionstatus() == "Success" &&
+         gs_wizard_status$gs_scores_completed == TRUE) {
         load_courses(gs_connectionstatus())
       } else {
         NULL
@@ -132,18 +134,29 @@ gs_canvas_server <- function(input, output, session, gs_data,gs_wizard_status,ca
   observeEvent(input$gs_loadgrades, {
     
     if(!is.null(gs_selectedcourses())) {
+      showModal(modalDialog(
+        title = "Loading Progress",
+        "Please wait while we load the data...",
+        div(id = "progress-container", style = "width: 100%;"),
+        easyClose = FALSE,
+        footer = NULL
+      ))
       
       #DEBUG - reads canvas data from file for testing
-      #canvas_roster <- get_student_roster(gs_selectedcourses(),gs_errorlist(),INSTRUCTOR_SEARCH_KEY)
-      canvas_roster <- readRDS("test/canvas_roster.rds")
+      #canvas_roster <- readRDS("test/canvas_roster.rds")
       #saveRDS(canvas_roster, "test/canvas_roster.rds")
+      
+      canvas_roster <- get_student_roster(gs_selectedcourses(),gs_errorlist(),INSTRUCTOR_SEARCH_KEY)
+
       
       gs_canvasroster(canvas_roster)
 
       #DEBUG - reads gradescope data from file for testing
-      #gs_roster <- gs_data$gs_roster
       #saveRDS(gs_roster, "test/gs_roster.rds")
-      gs_roster <- readRDS("test/gs_roster.rds")
+      #gs_roster <- readRDS("test/gs_roster.rds")
+      
+      gs_roster <- gs_data$gs_roster
+
       
       #compare canvas_roster to gs_roster to find missing cadets
       #finds cadets in canvas_roster that are not in gs_roster
@@ -151,15 +164,7 @@ gs_canvas_server <- function(input, output, session, gs_data,gs_wizard_status,ca
       # make gs_roster all lower case column names
       
       gs_roster <- gs_roster %>% rename_all(tolower)
-      if(nrow(gs_roster) > nrow(canvas_roster)) {
-          showModal(modalDialog(
-            title = "Error: Canvas Roster is Smaller",
-            "The Canvas Roster is smaller than the Gradescope Roster. Please check that you have the correct courses selected in Canvas. This error does not stop you from proceeding but is for your consideration.",
-            easyClose = TRUE,
-            footer = modalButton("Close")
-          ))
-          return() # Stop further execution
-        }
+
       if ("sid" %in% colnames(gs_roster)) {
         # Compare using SID
         df_missing <- canvas_roster %>%
@@ -175,25 +180,34 @@ gs_canvas_server <- function(input, output, session, gs_data,gs_wizard_status,ca
           easyClose = TRUE,
           footer = modalButton("Close")
         ))
-        return() # Stop further execution
+        #return() # Stop further execution
       }
       
     if (nrow(df_missing) > 0) {
       gs_cadetsmissing(df_missing)
-    } else {
-      gs_cadetsmissing("none")
     }
-    } else {
-      NULL
+    else {
+      gs_cadetsmissing(NULL)
+    } 
     }
-    #check 
+    removeModal()
+    if(nrow(gs_roster) > nrow(canvas_roster)) {
+      showModal(modalDialog(
+        title = "Note: The Selected Canvas Roster is Small",
+        "The Canvas Roster is smaller than the Gradescope Roster. Please check that you have the correct courses selected in Canvas. This error does not stop you from proceeding but is for your consideration.",
+        easyClose = TRUE,
+        footer = modalButton("Close")
+      ))
+      #return() # Stop further execution
+    }
+    else{
       showModal(modalDialog(
         title = "Roster Loaded",
         "Courses have been successfully loaded!",
         footer = modalButton("Close"),
         easyClose = TRUE
       ))
-    
+    }
   })
   
   #### Canvas Roster - Datatable w. Filters ####
@@ -234,6 +248,7 @@ gs_canvas_server <- function(input, output, session, gs_data,gs_wizard_status,ca
 
 ## Next button ----
 observeEvent(input$gs_canvas_next, {
+  
   # Ensure `df_missing` is calculated beforehand
   if (is.null(gs_canvasroster())) {
     showModal(
@@ -246,23 +261,10 @@ observeEvent(input$gs_canvas_next, {
     return()
   }
   
-  
+  #browser()
   # Get the number of missing cadets
-  numMissing <- nrow(gs_cadetsmissing())
-  if(numMissing>0){
-    showModal(
-      modalDialog(
-        title = "Confirmation",
-        tagList(
-          p("There are ",numMissing," cadets with no exam data in Gradescope, for your information. You can still proceed."             )),
-      
-      footer = tagList(
-        modalButton("Cancel"),
-        actionButton("confirm_gs_canvas", "Yes, Proceed")
-      )
-      ),
-    )
-  }else{
+  #if gs_
+  if(is.null(gs_cadetsmissing())){
     # Show the modal dialog
     showModal(
       modalDialog(
@@ -275,6 +277,20 @@ observeEvent(input$gs_canvas_next, {
           actionButton("confirm_gs_canvas", "Yes, Proceed")
         )
       )
+    )
+  }else{
+    numMissing <- nrow(gs_cadetsmissing())
+    showModal(
+      modalDialog(
+        title = "Confirmation",
+        tagList(
+          p("There are ",numMissing," cadets with no exam data in Gradescope, for your information. You can still proceed."             )),
+        
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("confirm_gs_canvas", "Yes, Proceed")
+        )
+      ),
     )
     
   }

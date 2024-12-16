@@ -1,5 +1,4 @@
 
-# UI ----
 # UI -------------------------------------------------------
 tags$style(HTML("
   .remove-button {
@@ -161,6 +160,10 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
   #roster data from excel
   gs_roster <- reactiveVal()
   
+  #score column from user selection
+  score_column <- reactiveVal()
+  max_column <- reactiveVal()
+  
   ## Input Excel File ----
   observeEvent(input$gs_score_files, {
     # browser()
@@ -205,14 +208,22 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
   ## Excel version selector ----
   # Function to show a modal for selecting a version
   modal_excelversionselector <- function(index) {
+    
     file_name <- file_versions$files[index]
     #read the excel file for htis index
+    #browser()
+    if(is_empty(file_versions$versions)){
+      versionchoices <- 1:9
+    }
+    else{
+      versionchoices <- setdiff(1:9, file_versions$versions)
+    }
     showModal(modalDialog(
       title = paste("Select Version for File:", file_name),
       selectInput(
         inputId = "selected_version",
         label = "Version:",
-        choices = 1:9,
+        choices = versionchoices,
         selected = NULL
       ),
       footer = tagList(
@@ -226,9 +237,12 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
   observeEvent(input$confirm_excel_version, {
     # Get the current file index needing version selection
     current_index <- length(file_versions$versions) + 1
+    
     file_name <- file_versions$files[current_index]
+    
     df <- read_excel(input$gs_score_files$datapath[current_index])
-    df <- df%>%mutate(version=input$selected_version)
+    
+    df <- df %>% mutate(version=input$selected_version)
     #browser()
     #I want to select the columnnames that match the admin_matches
     matches <- as.character(admin_matches())
@@ -237,21 +251,74 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
     
     df2 <- df %>% select(all_of(valid_matches),version)
     
-    #find the column that has a column containing 'score' 
-    score_col <- grep("score", colnames(df2), value = TRUE, ignore.case = TRUE)
+    #if the score column is not selected, then have the user select it
     
+    if(current_index == 1){
+      ### Identify Score Column ----
+      
+      col_options <- colnames(df2)
+      
+      showModal(modalDialog(
+        title = "Select the 'Total Score' or 'Score' Column",
+        selectInput("score_col", "Select the column header which contains the score of the individual. This is likely called 'Total Score'. DO NOT SELECT the MAX points column.", choices = col_options),
+        actionButton("confirm_score_col", "Confirm Selection"),
+        footer = NULL,
+        easyClose = FALSE
+      ))
+      
+      observeEvent(input$confirm_score_col, { 
+        score_column(input$score_col)
+        removeModal()
+        
+        ### Identify Max Column ----
+        
+        showModal(modalDialog(
+          title = "Select the 'Max Points'  Column",
+          selectInput("max_col", "Select the column header which contains the maximum points for the exam.", choices = col_options),
+          actionButton("confirm_max_col", "Confirm Selection"),
+          footer = NULL,
+          easyClose = FALSE
+        ))
+        
+        observeEvent(input$confirm_max_col, { 
+          max_column(input$max_col)
+          removeModal()
+          process_with_score_col(df2,current_index)
+        })
+      })
+    }
+    else{
+      process_with_score_col(df2,current_index)
+    }
+
+    
+  })
+
+  process_with_score_col <- function(df,current_index){
+  
+    file_name <- file_versions$files[current_index]
     #remove NA entries in the score column
-    df2 <- df2 %>% filter(!is.na(!!sym(score_col)))
+
+    df_NA_filtered <- df %>% filter(!is.na(!!sym(score_column())))
+    
     #sym(score_col): Converts the column name (as a string) into a symbol that dplyr can interpret as a column reference.
     #!!: Unquotes the symbol, allowing it to be evaluated as a column name within filter().
     
-    gs_roster(rbind(gs_roster(),df2))
-    
-    # Save the selected version
-    file_versions$versions[[file_name]] <- input$selected_version
+    #try catch to handle if there are mismatches. 
+    # A likely error is if the rbind fails because the columns are not the same
+    # then I need to prompt the user to check that they uploaded the unaltered and matching files from gradescope
+    tryCatch({
+      gs_roster(rbind(gs_roster(),df_NA_filtered))
+    }, error = function(e) {
+      showModal(modalDialog(
+        title = "Error",
+        "There was an error processing the files. Please ensure that the files uploaded were the correct score file from Gradescope, you did not edit the file, and that both files came from the same assignment.",
+        easyClose = FALSE
+      ))
+    })
 
-        # Load the names 
-    # Remove the modal
+    #browser()
+    file_versions$versions[[file_name]] <- input$selected_version
     removeModal()
     
     # Show the modal for the next file, or finish if all files are processed
@@ -259,10 +326,13 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
       modal_excelversionselector(current_index + 1)
     } else {
       # All versions selected, do any post-processing if needed
-      print("All versions selected:")
-      print(file_versions$versions)
+      #print("All versions selected:")
+      #print(file_versions$versions)
     }
-  })
+    
+    
+    
+  }
   
   ## Excel Question UI ----
   # This is paired with a javascript function in the UI
@@ -688,7 +758,9 @@ gs_scores_server <- function(input, output, session,gs_data,gs_wizard_status){
     gs_data$gs_question_groups <- question_list
     
     gs_data$gs_roster <- gs_roster()%>% rename(sis_user_id = SID)
-
+    gs_data$versions_selected <- file_versions$versions
+    gs_data$score_column <- score_column()
+    gs_data$max_column <- max_column()
   })
 }
 

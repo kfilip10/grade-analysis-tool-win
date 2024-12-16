@@ -6,7 +6,7 @@ get_student_roster <- function(course_df, error_list, instructor.search.key = "i
     # error_list definition
     
     enrollment.list <- lapply(unique(course_df$id), function(x, i) {
-      incProgress(1 / nrow(course_df) / 2)
+      incProgress(1 / length(unique(course_df$id)))
       tryCatch(
         {
           get_course_items(course_id = x, item = "enrollments", include = "current_points")

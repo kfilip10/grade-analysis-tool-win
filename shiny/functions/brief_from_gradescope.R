@@ -22,7 +22,7 @@ gs_makebriefmain <- function(question_list,df_canvas_adj,missing_roster,cuts_df,
   cuts_df$question <- gsub("_", " ", cuts_df$question)  
   version_palette <- setNames(version_palette,unique(df_canvas_adj$version))
   
-  browser()
+  #browser()
   #df = question_list[[1]]
   # Check if input is a named list of dataframes
   if (!is.list(question_list) || is.null(names(question_list))) {
@@ -30,7 +30,7 @@ gs_makebriefmain <- function(question_list,df_canvas_adj,missing_roster,cuts_df,
   }
   ##1a. Title ----
   incProgress(1/progress.tot, detail = paste("Making Title Slide"))
-  ppt <- ppt_init()
+  ppt <- ppt_init(courseTitle,eventTitle)
   #browser()
   
   ##1b. Pre/post ----
@@ -109,11 +109,12 @@ gs_makebriefmain <- function(question_list,df_canvas_adj,missing_roster,cuts_df,
     
     ppt <- gen_question_slide(ppt,question_df,question_group_name,cuts_df,cut_filter_threshold)
 
-      }
+  }
+  return(ppt)
   ## Save the PowerPoint file ----
-  print(ppt, target = output_file)
+  #print(ppt, target = output_file)
   #print(ppt,target = "test.pptx")
-  message(paste("Slides have been saved to", output_file))
+  #message(paste("Slides have been saved to", output_file))
 }
 
 
@@ -122,10 +123,10 @@ gs_makebriefmain <- function(question_list,df_canvas_adj,missing_roster,cuts_df,
 #1. Summaries ----
 
 ##1A. PPT Initialize ----
-ppt_init <- function(courseTitle="PH2XX",eventTitle="WPRX",numberVersions=1){
+ppt_init <- function(courseTitle="PH2XX",eventTitle="WPRX"){
   
   ####Load PPT based on input data####
-  ppt <- read_pptx(str_c(wd,"/www/GS_questions.pptx")) 
+  ppt <- read_pptx(str_c(wd,"/www/template_gs.pptx")) 
   
   
   for(n in rev(seq_len(length(ppt)))){

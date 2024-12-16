@@ -458,7 +458,7 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
   
   #### :Comparison Table ####
   df.vers.sum <- df.total %>% group_by(version) %>% summarise("Count"=n(),
-                                                              "Mean (%)"=round(mean(mge.percent),1),
+                                                              "Mean (%)"=round(mean(mge.percent),1), 
                                                               "Median (%)"=round(median(mge.percent),1),
                                                               "Std. Dev (%)"=round(sd(mge.percent),1),
                                                               "Min (%)"=round(min(mge.percent),1),

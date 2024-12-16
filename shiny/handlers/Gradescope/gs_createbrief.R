@@ -3,8 +3,9 @@
 # UI ----
 
 gs_createbrief_ui <- function(){
-    mainPanel(
-      fluidRow(
+  
+  div(
+    fluidPage(
         textInput(inputId="gs_courseTitle", label=HTML("<b>Course name:</b>"), value = "PH2X1"),
         textInput(inputId="gs_eventTitle", label=HTML("<b>Event name:</b>"), value = "WPR "),
         p("Use the slider below to set a threshold for the percentage of cuts applied to the brief. For example choosing 15% means that any cuts applied to at least 15% or more of the test population will be included and cuts that are not applied widely will be filtered out. If you choose 100% there will be practically 0 cuts in the brief. Choose 0% for all cuts to be included, which you can manually delete."),
@@ -19,12 +20,19 @@ gs_createbrief_ui <- function(){
         br(),
         
         textOutput("scores_in_canvas_state"),
-        h2("Generate Brief"),
-        actionButton("gs_createbriefbutton", "Generate Brief"),
-        disabled(downloadButton("gs_briefdownload", "Download Brief")),
-      )
-    
+        h3("Generate Brief"),
+        actionButton("gs_createbriefbutton", "Generate Brief",style = "width: 400px;"),
+        br(),
+        h3("Download Brief"),
+        
+        shinyjs::disabled(downloadButton("gs_briefdownload", "Download Brief",
+                                style = "background-color: #3498db; color: #ffffff;width: 400px;")),
+        h3("Proceed to Canvas Grades Upload"),
+        actionButton("gs_brief_next", label = HTML("Confirm and Proceed <span class='arrow-icon'>&rarr;</span>")), 
+                     
+  
   )
+)
 }
 
 # Server ----
@@ -57,6 +65,39 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
       "You said your grades are NOT in Canvas already, this will be used to calculate the pre/post score distribution."
     }
   })
+  #create logic to merge the canvas and gs rosters
+  #gs_data$upload_roster
+  df_canvas <- reactiveVal()
+  
+  observe({    
+    req(gs_data$canvas_roster, gs_data$gs_roster)
+    df_canvas_roster <- gs_data$canvas_roster
+    
+    df_gs <- gs_data$gs_roster 
+    
+    # remove the missing roster from the df_canvas
+    df_canvas_roster <- df_canvas_roster[!df_canvas_roster$sis_user_id %in% gs_data$missing_roster$sis_user_id,]
+    
+    
+    
+    #combine df_canvas with df_gs
+    df_canvas_adj <- full_join(df_canvas_roster, df_gs, by ="sis_user_id")
+    
+    #remove incomplete rows (i.e. if they selected fewer entries)
+    df_canvas_adj <- df_canvas_adj %>% filter(!is.na(user_id))
+    
+    #browser()
+    
+    df_canvas_adj <- df_canvas_adj %>% 
+      rename(pre_points = grades.unposted_current_points,
+             pre_percent = grades.unposted_current_score,
+             grade = grades.unposted_current_grade)
+    
+    df_canvas_adj <- df_canvas_adj %>% 
+      mutate(current_max=ifelse(is.na(pre_percent),0,pre_points/pre_percent*100))
+    
+    df_canvas(df_canvas_adj)
+  })
   
   observeEvent(input$gs_createbriefbutton, {
 
@@ -71,34 +112,29 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
         ## Canvas roster prep ----
         #DEBUG - loads a completed gs_data object for testing
         #saveRDS(gs_data, "test/gs_data_complete.rds")
-        gs_data <- readRDS("test/gs_data_complete.rds")
+        #gs_data <- readRDS("test/gs_data_complete.rds")
         
         
         #data frame of grades from canvas
-        df_canvas <- gs_data$canvas_roster
-        df_gs <- gs_data$gs_roster 
-        # remove the missing roster from the df_canvas
-        df_canvas <- df_canvas[!df_canvas$sis_user_id %in% gs_data$missing_roster$sis_user_id,]
-        #combine df_canvas with df_gs
-        df_canvas_adj <- full_join(df_canvas, df_gs, by ="sis_user_id")
-        browser()
+       
         
-        df_canvas_adj <- df_canvas_adj %>% 
-          rename(pre_points = grades.unposted_current_points,
-                 pre_percent = grades.unposted_current_score,
-                 grade = grades.unposted_current_grade)
-        
-        df_canvas_adj <- df_canvas_adj %>% 
-          mutate(current_max=ifelse(is.na(pre_percent),0,pre_points/pre_percent*100))
-        
+        df_canvas_adj <- df_canvas()
         ## Scores in canvas, back calc ----
         if(input$scores_in_canvas){
           tryCatch({
           #if scores are in canvas adjust the roster to subtract the `score`
           #TODO: It would be nice to have a way for the user to specify the column names for the total score and max points
-        score_col <- grep("total score", colnames(df_canvas_adj), value = TRUE, ignore.case = TRUE)
+          browser()
+            
+        score_col <- grep(gs_data$score_column, 
+                          colnames(df_canvas_adj), 
+                          value = TRUE, 
+                          ignore.case = TRUE)
         
-        total_col <- grep("max points", colnames(df_canvas_adj), value = TRUE, ignore.case = TRUE)
+        total_col <- grep(gs_data$max_column, 
+                          colnames(df_canvas_adj), 
+                          value = TRUE, 
+                          ignore.case = TRUE)
         
         df_canvas_adj <- df_canvas_adj %>%
           mutate(pre_points = pre_points - .data[[score_col]],
@@ -158,48 +194,83 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
                   question_df_list,
                   df_canvas_adj,
                   gs_data$missing_roster, # data frame of missing grades
-                  #DEBUG - Added the [[1]] becase of my saved RDS
-                  gs_data$cuts_df[[1]], # data frame of cuts
+                  #DEBUG gs_data$cuts_df[[1]], # used if reading from RDS
+                  gs_data$cuts_df, # data frame of cuts
                   cut_filter_threshold(),
                   progress.tot,
                   course_title(),
                   event_title(),
                   file_name
                 )
-
+                
+                
         setProgress(1, detail = paste("Complete!"))
       })
+      df_canvas_adj <- 
+      
+      shinyjs::enable("gs_briefdownload")
+      #browser()
       # Automatically trigger download after creation
-      shinyjs::runjs("$('#download_ppt').trigger('click');")
-      
-
-      # Define the download handler
-      output$download_ppt <- downloadHandler(
-        filename = function() {
-          file_name
-        },
-        content = function(file) {
-          file.copy(file_name, file)  # Copy generated file to download location
-        }
-      )
-      
-    }, error = function(e) {
-      # Show error modal in case of failure
+      #shinyjs::runjs("$('#gs_briefdownload').trigger('click');")
       showModal(modalDialog(
-        title = "Error",
-        paste("An error occurred:", e$message),
-        footer = modalButton("Close")
+        title = "Brief Created",
+        "The brief has been created, you may download the brief.",
+        easyClose = TRUE
       ))
-    })
+
+  })
+
+  
+  
+})
+
+## Download Brief ----
+output$gs_briefdownload <- downloadHandler(
+  filename = function() {
+    paste0("Brief - ", course_title(), " - ", event_title(), ".pptx")
+  },
+  content = function(file) {
+    try
+    if (is.null(gs_data$ppt)) {
+      showModal(modalDialog(
+        title = "No Brief Created",
+        "Please create a brief before downloading.",
+        easyClose = TRUE
+      ))
+      return(NULL)  # Stop execution to prevent download
+    }
+    print(gs_data$ppt,target = file)
+  }
+)
+  
+  ## 'Next' Button ----
+  observeEvent(input$gs_brief_next, {
+    #req(question_groups())
+    #compile_questions()
+    showModal(
+      modalDialog(
+        title = "Confirmation",
+        "Proceed to the canvas upload tab? (clicking yes will not upload the roster yet)",
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("confirm_gs_brief", "Yes, Proceed")
+        )
+      )
+    )
   })
   
-  #### Download Brief ####
-  output$gs_briefdownload <- downloadHandler(
-    filename = function() {
-      paste0("Brief - ", course_title(), " - ", event_title(), ".pptx")
-    },
-    content = function(file) {print(ppt,target= file)
-    }
-  )
-}
+  observeEvent(input$confirm_gs_brief, {
+
+    gs_data$upload_roster <- df_canvas()
+    
+    #DEBUG: save below
+    #saveRDS(reactiveValuesToList(gs_data),"test/gs_data_upload_test.rds")
+    
+    
+    removeModal()
+    
+    
   
+  })  
+  
+}

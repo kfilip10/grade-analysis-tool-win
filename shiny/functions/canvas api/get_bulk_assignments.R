@@ -16,6 +16,8 @@ get_bulk_assignments <- function(course.list,course_id,progress=FALSE){
                   add_headers(Authorization = paste("Bearer", check_token())),
                   query  = args,
                   encode = 'form')
+  
+  
   d <- paginate(response) %>%
     purrr::map(httr::content, "text") %>%
     purrr::map(jsonlite::fromJSON, flatten = TRUE)

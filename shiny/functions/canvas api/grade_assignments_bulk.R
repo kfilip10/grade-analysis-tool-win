@@ -5,7 +5,7 @@
 #' @param course_id [Integer] id from course roster
 #' @param user_id [Integer] id from course roster
 #' @param assignment_id [Integer] id from assignment list 
-#' @param points [Integer] number of points to assign, labelled in course roster as 'points'
+#' @param points [num] number of points to assign, labelled in course roster as 'points'
 #' @req dataframe with combined course roster
 #' @req dataframe with combined assignment list
 grade_assignments_bulk <- function(df){
@@ -13,7 +13,7 @@ grade_assignments_bulk <- function(df){
   if(length(unique(df$assignment_id)) > 1) stop("Only one assignment_id allowed")
   assignment_id <- unique(df$assignment_id)
   course_id <- unique(df$course_id)
-  grade_data <- setNames(as.list(df$points), paste0('grade_data[', df$id, '][posted_grade]'))
+  grade_data <- setNames(as.list(df$points), paste0('grade_data[', df$user_id, '][posted_grade]'))
   url <- make_canvas_url('courses',course_id, "assignments", assignment_id, "submissions/update_grades")
   response <- POST(url,
                    add_headers(Authorization = paste("Bearer", check_token())),
