@@ -149,7 +149,7 @@ parse_version_manual <- function(df,versionNum,breaks,grades,vers.color) {
 
 
 import_excel_manual <- function(list.df,numberVersions){
-  version.palette<-brewer.pal(6,"Dark2")
+  version_palette<-brewer.pal(6,"Dark2")
   wd <- getwd() 
   
   # grades.file <- paste0(wd,"/www/GradeThresholds.csv")
@@ -165,7 +165,7 @@ import_excel_manual <- function(list.df,numberVersions){
   #data from the header and reformats the data to be clean
   gb <- list()
   for (i in 1:numberVersions){
-    list.el <- parse_version_manual(list.df[[i]], i,breaks,grades,version.palette[[i]])
+    list.el <- parse_version_manual(list.df[[i]], i,breaks,grades,version_palette[[i]])
     gb[[i]] <- list.el
     rm(list.el)
   }
@@ -225,7 +225,7 @@ manual_ppt <- function(df.total,df.q, courseTitle, eventTitle, numberVersions,cu
   if(!dir.exists(temp.dir)){dir.create(temp.dir)}
   wd <- getwd() #copied
   #Palette for versions
-  version.palette<-brewer.pal(6,"Dark2")
+  version_palette<-brewer.pal(6,"Dark2")
   
   #### ::Slide Style and locations ####
   caption_style <- fp_text(font.size = 20,font.family = "Calibri")
@@ -456,14 +456,14 @@ manual_ppt <- function(df.total,df.q, courseTitle, eventTitle, numberVersions,cu
   
   #show(df.vers.sum.ft)
   
-  version.palette <- setNames(version.palette,unique(df.vers.sum$version))
+  version_palette <- setNames(version_palette,unique(df.vers.sum$version))
   
   version.unique <- unique(df.total$version)
   df.total$version <- factor(df.total$version, rev(version.unique))
   #### :Box and Whisker ####
   v.comp <-ggplot(df.total, aes(x=version, y=mge.percent, fill=version)) +
     geom_hline(yintercept=60, linetype="dashed",linewidth=1, color = "red")+
-    geom_boxplot(alpha=0.5)+  scale_fill_manual(values=version.palette)+
+    geom_boxplot(alpha=0.5)+  scale_fill_manual(values=version_palette)+
     theme_bw()+     labs(title = "Version Comparisons",x="",y="Score (%)")+
     scale_y_continuous(breaks = seq(0,100, 5),sec.axis = 
                          sec_axis(~.x,breaks = seq(0,100, 5)))+
@@ -512,14 +512,14 @@ manual_ppt <- function(df.total,df.q, courseTitle, eventTitle, numberVersions,cu
                          str_c("Version ",i," Score Distribution"),
                          "Score (%)",
                          "Count",
-                         version.palette[i],bin.width)
+                         version_palette[i],bin.width)
     #show(v.plot1)
     
     # Version bar plot for grades 
     df.version$mge.grade <- factor(df.version$mge.grade, grades)
     v.plot2 <- df.version%>%count(mge.grade)%>%mutate(label=paste(n))%>%
      ggplot(aes(x=factor(mge.grade),y=n)) + 
-      geom_col(width=0.7,fill=version.palette[i]) +
+      geom_col(width=0.7,fill=version_palette[i]) +
       geom_text(
         aes(y=-4,label = label),
         vjust=0,
@@ -587,7 +587,7 @@ manual_ppt <- function(df.total,df.q, courseTitle, eventTitle, numberVersions,cu
       q.grades   <- q.grades  %>%mutate(label=paste(n))
       
       q.grades.plot <- q.grades %>% ggplot(aes(x=factor(grade),y=n)) + 
-        geom_col(width=0.7,fill=version.palette[version.num]) +
+        geom_col(width=0.7,fill=version_palette[version.num]) +
         geom_text(
           aes(y=-10,label = label),
           vjust=0,
@@ -619,7 +619,7 @@ manual_ppt <- function(df.total,df.q, courseTitle, eventTitle, numberVersions,cu
         autofit()
       #show(df.q.t.sum)
       #### Make graph bottom left####
-      q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version.palette[i],bin.width)
+      q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version_palette[i],bin.width)
       
       
       ppt <- add_slide(ppt, layout = "question", master = "Office Theme")
