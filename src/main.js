@@ -157,7 +157,7 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
 
   let shinyRunning = false
   //time before it times out and says to close
-  const serverStartupTimeout = 30000; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
+  const serverStartupTimeout = 12500; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
 
   // Setup a timeout to notify the user if the server hasn't started within the limit
   const timeoutId = setTimeout(() => {

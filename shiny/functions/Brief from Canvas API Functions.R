@@ -10,7 +10,7 @@ import_WPR_excel <- function(list.df,numberVersions){
   gb <- list()
   
   for (i in 1:numberVersions){
-    list.el <- parse_version(list.df[[i]], i,version.palette[[i]])
+    list.el <- parse_version(list.df[[i]], i,version_palette[[i]])
     gb[[i]] <- list.el
     rm(list.el)
   }
@@ -481,14 +481,14 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
   
   #show(df.vers.sum.ft)
   
-  version.palette <- setNames(version.palette,unique(df.vers.sum$version))
+  version_palette <- setNames(version_palette,unique(df.vers.sum$version))
   
   version.unique <- unique(df.total$version)
   df.total$version <- factor(df.total$version, rev(version.unique))
   #### :Box and Whisker ####
   v.comp <-ggplot(df.total, aes(x=version, y=mge.percent, fill=version)) +
     geom_hline(yintercept=60, linetype="dashed",linewidth=1, color = "red")+
-    geom_boxplot(alpha=0.5)+  scale_fill_manual(values=version.palette)+
+    geom_boxplot(alpha=0.5)+  scale_fill_manual(values=version_palette)+
     theme_bw()+     labs(title = "Version Comparisons",x="",y="Score (%)")+
     scale_y_continuous(breaks = seq(0,100, 5),sec.axis = 
                          sec_axis(~.x,breaks = seq(0,100, 5)))+
@@ -536,14 +536,14 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
                          str_c("Version ",i," Score Distribution"),
                          "Score (%)",
                          "Count",
-                         version.palette[i],bin.width)
+                         version_palette[i],bin.width)
     #show(v.plot1)
     
     # Version bar plot for grades 
     df.version$mge.grade <- factor(df.version$mge.grade, grades)
     v.plot2 <- df.version%>%count(mge.grade)%>%mutate(label=paste(n))%>%
       ggplot(aes(x=factor(mge.grade),y=n)) + 
-      geom_col(width=0.7,fill=version.palette[i]) +
+      geom_col(width=0.7,fill=version_palette[i]) +
       geom_text(
         aes(y=-0.15*max(n),label = label),
         vjust=0,
@@ -610,7 +610,7 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
     q.grades   <- q.grades  %>%mutate(label=paste(n))
     
     q.grades.plot <- q.grades %>% ggplot(aes(x=factor(grade),y=n)) + 
-      geom_col(width=0.7,fill=version.palette[version.num]) +
+      geom_col(width=0.7,fill=version_palette[version.num]) +
       geom_text(
         aes(y=-0.15*max(n),label = label),
         vjust=0,
@@ -642,14 +642,14 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
       autofit()
     #show(df.q.t.sum)
     #### Make graph bottom left####
-    #q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version.palette[i],bin.width)
+    #q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version_palette[i],bin.width)
 
     #plotHisto <- function(df,col,title,xaxis,yaxis,color,bin.width){
     df <- x
     col <- "percent"
     xaxis <- "Score (%)"
     yaxis <- "Count"
-    color <- version.palette[version.num]
+    color <- version_palette[version.num]
 
       max.counts <- max(hist(df[[col]], breaks=seq(0,max(df[[col]])+bin.width,by=bin.width), plot=FALSE)$counts)
       max.pts <- max(x$max)
@@ -743,13 +743,13 @@ make_ppt <- function(l, courseTitle, eventTitle,cutSheet,bin.width,sortStyle,pro
 # Takes df.total, version palette (make that global?) 
 pop.pre.t.test <- function(df.total,ppt){
   
-  version.palette <- setNames(version.palette,unique(df.total$version))
+  version_palette <- setNames(version_palette,unique(df.total$version))
   
   P <- ggplot(df.total, aes(x = pre.percent, fill = version)) +
     geom_density(alpha = 0.2)+
     theme_bw()+theme(text = element_text(size = 20),)+
     labs(title = "Pre-WPR Scores for Version populations", x = "Score (%)", y = "Density")+
-    scale_fill_manual(values=version.palette)
+    scale_fill_manual(values=version_palette)
   
   
   df.vers.sum <- df.total %>% group_by(version) %>% summarise("Count"=n(),
