@@ -502,10 +502,11 @@ ppt_versioncomp <- function(ppt, df_canvas_adj,eventTitle){
    
    #### Version summary ####
    for (i in 1:length(unique(df_canvas_adj$version))){
+
      df_version <- df_canvas_adj %>% filter(version==unique(df_canvas_adj$version)[i])
      #df_version <- gb[[i]][[1]] 
      
-     vers.sum <- df.vers.sum %>% filter(version==paste0("Version ",i))
+     vers.sum <- df.vers.sum %>% filter(version==i)
      #### :Table ####
      vers.sum.ft <- flextable(vers.sum) %>% align_text_col(align = "center") %>%
        align_nottext_col(align = "center") %>% 

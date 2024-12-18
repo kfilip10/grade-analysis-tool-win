@@ -1,8 +1,8 @@
 {
   "name": "grade-analysis-tool",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "type": "module",
-  "description": "Analyzes grades from Canvas, now with (limited) Gradescope support!",
+  "description": "Analyzes grades from Canvas, now with Gradescope support!",
   "main": "src/main.js",
   "repository": {
     "type": "git",

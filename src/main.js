@@ -133,6 +133,12 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
   onErrorLater, onSuccess) => {
   const { dialog } = await import('electron');
 
+  loadingSplashScreen.webContents.once('did-finish-load', () => {
+    console.log("Another Test")
+    loadingSplashScreen.webContents.send('loading-event', "Test");
+  })
+  await progressCallback({'loading-event': "Test2"})
+
   if (attempt > 3) {
     await progressCallback({ attempt: attempt, code: 'failed' })
     await onErrorStartup()
@@ -147,10 +153,11 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
   let shinyPort = randomPort()
 
   await progressCallback({ attempt: attempt, code: 'start' })
+  // Notify the loading screen that we're starting the Shiny server
 
   let shinyRunning = false
   //time before it times out and says to close
-  const serverStartupTimeout = 15000; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
+  const serverStartupTimeout = 30000; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
 
   // Setup a timeout to notify the user if the server hasn't started within the limit
   const timeoutId = setTimeout(() => {
@@ -205,6 +212,11 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
       });
     storePid(rShinyProcess.pid)
     console.log(`Launched child process: PID: ${rShinyProcess.pid}`)
+      
+
+    await progressCallback({ attempt, code: 'error', message: 'Stored R Process' }); //CHANGED
+
+
   } catch (e) {
     shinyProcessAlreadyDead = true;
     console.log(`Shiny Died`)  //added this for troubleshooting
@@ -218,7 +230,7 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
     if (shinyProcessAlreadyDead) {
       break
     }
-    await waitFor(500)
+    await waitFor(250) //CHANGED: Was 500, changed to 250
     try {
       const res = await http.head(url, { timeout: 1000 })
       // TODO: check that it is really shiny and not some other webserver
@@ -330,7 +342,19 @@ const createLoadingSplashScreen = () => {
 const createErrorScreen = () => {
   errorSplashScreen = createSplashScreen('failed')
 }
+  // pass the loading events down to the loadingSplashScreen window
+const progressCallback = async (event) => {
+    loadingSplashScreen.webContents.once('did-finish-load', () => {
 
+  try {
+    if (loadingSplashScreen) {
+      loadingSplashScreen.webContents.send('loading-event', event.message);
+    }
+  } catch (e) {
+    console.error('Error sending loading event:', e);
+  }
+})
+};
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -452,6 +476,15 @@ app.on('ready', async () => {
   }
 
   createLoadingSplashScreen()
+  console.log("create loading splash")
+    // Wait for the splash screen to finish loading
+  loadingSplashScreen.webContents.once('did-finish-load', () => {
+    console.log('Loading splash screen is ready.');
+
+    // Send a simple message to the splash screen
+    loadingSplashScreen.webContents.send('loading-event', 'Initializing the application...');
+  });
+
 
   //waits for a loading screen
   const emitSplashEvent = async (event, data) => {
@@ -460,11 +493,8 @@ app.on('ready', async () => {
     } catch (e) { }
   }
 
-  // pass the loading events down to the loadingSplashScreen window
-  const progressCallback = async (event) => {
-    await emitSplashEvent('start-webserver-event', event)
 
-  }
+
 
   //If we encounter an error after startup (and main window isn't called), we call the error splash screen
   const onErrorLater = async () => {

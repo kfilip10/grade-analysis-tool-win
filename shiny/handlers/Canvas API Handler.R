@@ -54,9 +54,9 @@ createCanvasPrepPage <- function() {
                 h4("4a. Download a gradebook of the checkbox assignments above:"),
                 ##DEBUG Removed 'disabled' on download button for troubleshooting
                 #disabled(
-                  downloadButton("download_gradebook_canvas", 
+              disabled(downloadButton("download_gradebook_canvas", 
                                  label="Download Canvas Gradebook",
-                                 style="color: black; background-color: #cfbb34"),
+                                 style="color: black; background-color: #cfbb34")),
                 #),
                 h4("4b. Download a grading template:"),
                 h5("Select which assignment to generate a grading template for:"),
@@ -714,7 +714,9 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
         
       })
       withProgress(message = "Merging Data", value=0, {
-      Sys.sleep(0.5)
+      #blanket error handling
+        
+      tryCatch({
       gb.comb <- gb.canvas %>% filter(user_id %in% roster.course$user_id)
 
       #match the assignment id to an assignment name
@@ -729,6 +731,7 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
         mutate(percent = score/points_possible)
 
       setProgress(value = 0.5, message = "Joining Data...")
+      
       
             #rename name to assignment_name
       gb.comb.parse <-  gb.comb.parse %>% rename(assignment_name = name)
@@ -770,7 +773,17 @@ canvasPrep_Handler <- function(input, output, session,canvas_api_token) {
       gb.comb.parse <- gb.comb.parse %>% 
         left_join(roster.temp, by = "user_id")
       
-      
+      },error = function(e){
+          removeModal()
+          showModal(modalDialog(
+            title = "Error",
+            #add the error message to the modal
+            paste("An error occurred merging data. Click the button to'refresh section data' and try again. Error: ",e),
+            easyClose = TRUE,
+            footer = NULL
+          ))
+        }
+        )
       
       #I may need to get the assignment group name
       #I have the assignmentgroup name
