@@ -77,3 +77,67 @@ color: white;
 font-size: 10px;	
 font-family: Arial,Helvetica Neue,Helvetica,sans-serif; 
 }
+
+#screen {
+  position: relative;
+  width: 100vw;
+  /* Full screen width */
+  height: 100vh;
+  /* Full screen height */
+  overflow: hidden;
+  /* Prevent the image from going outside the container */
+  /* Optional: Set a background color */
+    /* Use flexbox for centering */
+    justify-content: center;
+    /* Center horizontally */
+}
+
+#bouncing-image {
+  position: absolute;
+  opacity: 0.5;
+      /* Slightly transparent */
+  width: 100px;
+  /* Set the image width */
+  height: auto;
+  /* Maintain aspect ratio */
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  /* Stack items vertically */
+  justify-content: center;
+  /* Center items vertically */
+  align-items: center;
+  /* Center items horizontally */
+  height: 100vh;
+  color: white;
+  font-family: Arial, sans-serif;
+  margin: 0;
+}
+
+/* Style for the loading spinner */
+#loading-spinner {
+  margin-bottom: 20px;
+  /* Space between spinner and other elements */
+}
+
+/* Style for the dynamic loading text */
+#loading-update,
+#loading-text,
+#info-update,
+#status {
+  font-size: 18px;
+  text-align: center;
+  margin-bottom: 20px;
+  /* Space between text and button */
+}
+
+/* Style for the Kill Server button */
+#kill-server-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  margin: 0;
+  /* Ensure no additional margins interfere */
+}

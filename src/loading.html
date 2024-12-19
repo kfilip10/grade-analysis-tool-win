@@ -3,59 +3,32 @@
 
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Loading. This may take 15-20 seconds.</title>
   <link rel="stylesheet" href="loading.css" media="all">
-  <style>
-    /* Style for the text below the spinner */
-body {
-    display: flex;
-    flex-direction: column; /* Stack items vertically */
-    justify-content: center; /* Center items vertically */
-    align-items: center; /* Center items horizontally */
-    height: 100vh;
-    color: white;
-    font-family: Arial, sans-serif;
-    margin: 0;
-  }
-
-  /* Style for the loading spinner */
-  #loading-spinner {
-    margin-bottom: 20px; /* Space between spinner and other elements */
-  }
-
-  /* Style for the dynamic loading text */
-  #loading-update,
-  #loading-text {
-    font-size: 18px;
-    text-align: center;
-    margin-bottom: 20px; /* Space between text and button */
-  }
-
-  /* Style for the Kill Server button */
-  #kill-server-button {
-    padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
-    margin: 0; /* Ensure no additional margins interfere */
-  }
-
-  </style>
 </head>
 
 <body>
-  <div id="loading-text">Loading: this may take 15-30 seconds. <br>Please be patient, we're giving it all we have.</div>
-  <div id="loading-container">
-    <div id="loading-spinner" class="spinner">
-      <div class="rect1"></div>
-      <div class="rect2"></div>
-      <div class="rect3"></div>
-      <div class="rect4"></div>
-      <div class="rect5"></div>
+  <div id="screen">
+    <img id="bouncing-image" src="../shiny/www/PANE.png" alt="Loading Image" />
+    <div id="loading-text"><h1>Grade Analysis Tool</h1> <br> Please be patient this could take 10-20 seconds.</div>
+    <div id="loading-container">
+      <div id="loading-spinner" class="spinner">
+        <div class="rect1"></div>
+        <div class="rect2"></div>
+        <div class="rect3"></div>
+        <div class="rect4"></div>
+        <div class="rect5"></div>
+      </div>
     </div>
+    <div id="loading-update">Updates here.</div>
+    <div id="info-update">Information updates here.</div>
+    <div id="status">
+          <button id="kill-server-button">Kill Loading Window</button>
+    </div>
+    <br>
+    <br>
   </div>
-  <div id="loading-update">Updates here.</div>
-  <div id="status"></div>
-  <button id="kill-server-button">Kill Server</button>
 
   <script>
 
@@ -64,10 +37,56 @@ body {
       window.electron.sendKillServer();
     });
 
-      // Listen for loading events from the main process
-      window.electron.onLoadingEvent((message) => {
-        document.getElementById('loading-update').innerHTML = `Loading Update: ${message}`;;
-      });
+    // Listen for loading events from the main process
+    window.electron.onLoadingEvent((message) => {
+      document.getElementById('loading-update').innerHTML = `${message}`;;
+    });
+
+    // Listen for info events
+    window.electron.onInfoEvent((message) => {
+      document.getElementById('info-update').innerHTML = `${message}`;
+    });
+
+
+    const screen = document.getElementById('screen');
+    const image = document.getElementById('bouncing-image');
+
+    let x = 0; // Current x position
+    let y = 0; // Current y position
+    let dx = 3; // x-direction speed
+    let dy = 3; // y-direction speed
+
+    const updatePosition = () => {
+      // Get container dimensions
+      const screenWidth = screen.clientWidth;
+      const screenHeight = screen.clientHeight;
+
+      // Get image dimensions
+      const imageWidth = image.offsetWidth;
+      const imageHeight = image.offsetHeight;
+
+      // Update position
+      x += dx;
+      y += dy;
+
+      // Check for collision with container edges
+      if (x + imageWidth >= screenWidth || x <= 0) {
+        dx = -dx; // Reverse x-direction
+      }
+      if (y + imageHeight >= screenHeight || y <= 0) {
+        dy = -dy; // Reverse y-direction
+      }
+
+      // Move the image
+      image.style.left = `${x}px`;
+      image.style.top = `${y}px`;
+
+      // Continue animation
+      requestAnimationFrame(updatePosition);
+    };
+
+    // Start the animation
+    requestAnimationFrame(updatePosition);
   </script>
 </body>
 

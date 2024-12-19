@@ -99,6 +99,7 @@ autoUpdater.logger.transports.file.level = 'info';
 // Listen for the 'kill-server' message from the renderer process
 ipcMain.on('kill-server', () => {
   console.log('I did it');
+  app.quit()
 });
 
 
@@ -133,11 +134,6 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
   onErrorLater, onSuccess) => {
   const { dialog } = await import('electron');
 
-  loadingSplashScreen.webContents.once('did-finish-load', () => {
-    console.log("Another Test")
-    loadingSplashScreen.webContents.send('loading-event', "Test");
-  })
-  await progressCallback({'loading-event': "Test2"})
 
   if (attempt > 3) {
     await progressCallback({ attempt: attempt, code: 'failed' })
@@ -150,34 +146,61 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
     return
   }
 
-  let shinyPort = randomPort()
+  //let shinyPort = randomPort()
+  const net = require('net');
+  function isPortAvailable(port) {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once('error', () => resolve(false));
+      server.once('listening', () => {
+        server.close(() => resolve(true));
+      });
+      server.listen(port);
+    });
+  }
+
+  const shinyPort = await (async () => {
+    let port;
+    do {
+      port = randomPort();
+    } while (!(await isPortAvailable(port)));
+    return port;
+  })();
 
   await progressCallback({ attempt: attempt, code: 'start' })
   // Notify the loading screen that we're starting the Shiny server
 
   let shinyRunning = false
   //time before it times out and says to close
-  const serverStartupTimeout = 12500; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
+  const serverStartupTimeout = 30000; // Timeout limit in milliseconds (e.g., 30000 ms for 30 seconds)
 
-  // Setup a timeout to notify the user if the server hasn't started within the limit
-  const timeoutId = setTimeout(() => {
-    if (!shinyRunning) {
-      console.error("R Shiny server startup timed out.");
-      dialog.showMessageBox({
-        type: 'error',
-        title: 'Server Startup Timeout',
-        message: 'The server failed to start within the expected time. Please restart the application.',
-        buttons: ['Restart']
-      }).then(() => {
+// Setup a timeout to notify the user if the server hasn't started within the limit
+const timeoutId = setTimeout(() => {
+  if (!shinyRunning) {
+    console.error("R Shiny server startup timed out.");
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Server Startup Timeout',
+      message: 'The server failed to start within the expected time. Please restart the application.',
+      buttons: ['Restart', 'Close']
+    }).then(({ response }) => {
+      // `response` will be the index of the button clicked
+      if (response === 0) { // 'Restart' button
         app.relaunch();
         try {
-          rShinyProcess.kill()
-        } catch (e) { }
-        app.quit(); // Quit the app or you can provide an option to restart
+          rShinyProcess.kill();
+        } catch (e) {
+          console.error("Failed to kill R Shiny process:", e);
+        }
+        app.quit();
+      }
+      // If the 'Close' button or 'X' is clicked, do nothing
+      app.quit();
 
-      });
-    }
-  }, serverStartupTimeout);
+    });
+  }
+}, serverStartupTimeout);
+
 
   const onError = async (e) => {
     console.error(e)
@@ -194,7 +217,17 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
 
   let shinyProcessAlreadyDead = false
   try {
-
+    console.log('Environment Variables:', {
+      'WITHIN_ELECTRON': '1',
+      'RHOME': rpath,
+      'R_HOME_DIR': rpath,
+      'RE_SHINY_PORT': shinyPort,
+      'RE_SHINY_PATH': shinyAppPath,
+      'R_LIBS': libPath,
+      'R_LIBS_USER': libPath,
+      'R_LIBS_SITE': libPath,
+      'R_LIB_PATHS': libPath
+    });
     rShinyProcess = execa(rscript,
       ['--vanilla', '-f', path.join(app.getAppPath(), 'start-shiny.R')],
       {
@@ -212,30 +245,39 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
       });
     storePid(rShinyProcess.pid)
     console.log(`Launched child process: PID: ${rShinyProcess.pid}`)
-      
-
-    await progressCallback({ attempt, code: 'error', message: 'Stored R Process' }); //CHANGED
-
+    await progressCallback({ attempt: attempt, type: 'info',message: `Launched R Shiny Process PID: ${rShinyProcess.pid}` })
 
   } catch (e) {
     shinyProcessAlreadyDead = true;
     console.log(`Shiny Died`)  //added this for troubleshooting
+    await progressCallback({ attempt, code: 'info', message: 'Shiny Died' }); //CHANGED
     clearTimeout(timeoutId);
     await onError(e); // Ensure onError is properly defined to handle th is
   }
 
   //defines gloabl url for shiny app
   let url = `http://127.0.0.1:${shinyPort}`
-  for (let i = 0; i <= 29; i++) { //added from 10 to 20 attempts because 10 was too few
+  console.log('port ',shinyPort )
+  for (let i = 0; i <= 15; i++) { //added from 10 to 20 attempts because 10 was too few
+    const waitTime = 2500 * Math.pow(1.2, i)
+    await waitFor(waitTime); // Exponential backoff
+
+    console.log('attempt ', i,':', waitTime , 'ms')
+    try {
+      await progressCallback({ attempt: i, type: 'loading', message: `Loading on Port ${shinyPort} <br> Server launch Attempt ${i}/30` });
+
+    } catch (error) {
+      console.error(`Error in progressCallback at attempt ${i}:`, error);
+    }
     if (shinyProcessAlreadyDead) {
       break
     }
-    await waitFor(250) //CHANGED: Was 500, changed to 250
+  //
     try {
       const res = await http.head(url, { timeout: 1000 })
       // TODO: check that it is really shiny and not some other webserver
       if (res.status === 200) {
-        await progressCallback({ attempt: attempt, code: 'success' })
+        await progressCallback({ attempt: attempt,type: 'info', message: 'success' })
         shinyRunning = true
         onSuccess(url)
         return
@@ -246,7 +288,7 @@ const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
   }
 
 
-  await progressCallback({ attempt: attempt, code: 'notresponding' })
+  await progressCallback({ attempt: attempt, type: 'info',message: 'Shiny Not Responding' })
 
   try {
     rShinyProcess.kill()
@@ -342,24 +384,42 @@ const createLoadingSplashScreen = () => {
 const createErrorScreen = () => {
   errorSplashScreen = createSplashScreen('failed')
 }
-  // pass the loading events down to the loadingSplashScreen window
-const progressCallback = async (event) => {
-    loadingSplashScreen.webContents.once('did-finish-load', () => {
 
+
+const progressCallback = async (event) => {
   try {
     if (loadingSplashScreen) {
-      loadingSplashScreen.webContents.send('loading-event', event.message);
+      if (loadingSplashScreen.webContents.isLoading()) {
+        loadingSplashScreen.webContents.once('did-finish-load', () => {
+          try {
+            if (event.type === 'loading') {
+              loadingSplashScreen.webContents.send('loading-event', event.message);
+            } else if (event.type === 'info') {
+              loadingSplashScreen.webContents.send('info-event', event.message);
+            }
+          } catch (e) {
+            console.error('Error sending event after load:', e);
+          }
+        });
+      } else {
+        if (event.type === 'loading') {
+          loadingSplashScreen.webContents.send('loading-event', event.message);
+        } else if (event.type === 'info') {
+          loadingSplashScreen.webContents.send('info-event', event.message);
+        }
+      }
     }
   } catch (e) {
-    console.error('Error sending loading event:', e);
+    console.error('Error sending event:', e);
   }
-})
 };
+
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {  
-  killStoredProcesses();
+  killStoredProcesses();   //removed because I'm not sure it is helping
 
   // Set a content security policy
   //Commented out for API call
@@ -398,12 +458,11 @@ app.on('ready', async () => {
     //autoUpdater event handling
     autoUpdater.on('checking-for-update', () => {
       updateScreen.webContents.send('update-message', 'Checking for updates...');
-      // waitFor(2000);
-      //can add code here if needed
     });
 
     autoUpdater.on('update-not-available', () => {
       console.log('No update available.');
+      clearTimeout(updateTimeout); // Clear timeout
       resolve('No update available');
     });
 
@@ -413,9 +472,10 @@ app.on('ready', async () => {
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
+      let percentRounded = Math.round(progressObj.percent);
       let log_message = "Download speed: " + progressObj.bytesPerSecond;
-      log_message = log_message + '\n Downloaded ' + progressObj.percent + '%';
-      log_message = log_message + '\n (' + progressObj.transferred + "/" + progressObj.total + ')';
+      log_message = log_message + '\n Downloaded ' + percentRounded + '%';
+      log_message = log_message + '\n (' + Math.round(progressObj.transferred) + "/" + Math.round(progressObj.total)+ ')';
 
       // Here, you would typically send this progress information to your renderer process
       updateScreen.webContents.send('update-message', log_message);
@@ -423,17 +483,21 @@ app.on('ready', async () => {
 
     autoUpdater.on('update-downloaded', () => {
       updateScreen.webContents.send('update-message', 'Update downloaded and ready to install.');
-
+      clearTimeout(updateTimeout); // Clear timeout
       try {
-        if (rShinyProcess) {
-          rShinyProcess.kill();
-          console.log('R Shiny process killed successfully.');
-        }
+          if (rShinyProcess) {
+            rShinyProcess.kill(); // Kill the R process
+            console.log('R Shiny process killed successfully.');
+          }
       } catch (e) {
         console.error('Failed to kill R Shiny process:', e);
       }
 
-      // Ensure `quitAndInstall()` handles quitting and installing
+      // Ensure Electron quits cleanly
+      app.removeAllListeners('window-all-closed'); // Prevent default app.quit behavior
+      app.quit(); // Quit the app completely
+
+        // Proceed with the update installation
       autoUpdater.quitAndInstall();
     });
 
@@ -457,8 +521,6 @@ app.on('ready', async () => {
     // The app is running from the terminal (not packed)
 
     console.log("Launched from terminal, testing updater");
-
-
     updateScreen.close();
 
     //autoUpdater.emit('checking-for-update')
