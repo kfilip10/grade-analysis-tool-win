@@ -108,15 +108,16 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
       withProgress(message = 'Generating brief', value = 0,min=0,max=1, {
         #pdf <- cutSheet()
         
-
         ## Canvas roster prep ----
         #DEBUG - loads a completed gs_data object for testing
-        #saveRDS(gs_data, "test/gs_data_complete.rds")
+        #test  <- reactiveValuesToList(gs_data)
+        #saveRDS(test, "test/gs_data_complete.rds")
         #gs_data <- readRDS("test/gs_data_complete.rds")
-        
-        
+
         #data frame of grades from canvas
-       
+        ##DEBUG
+        
+        #browser()
         
         df_canvas_adj <- df_canvas()
         ## Scores in canvas, back calc ----
@@ -124,8 +125,7 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
           tryCatch({
           #if scores are in canvas adjust the roster to subtract the `score`
           #TODO: It would be nice to have a way for the user to specify the column names for the total score and max points
-          browser()
-            
+        #browser()
         score_col <- grep(gs_data$score_column, 
                           colnames(df_canvas_adj), 
                           value = TRUE, 
@@ -139,6 +139,8 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
         df_canvas_adj <- df_canvas_adj %>%
           mutate(pre_points = pre_points - .data[[score_col]],
                  current_max = current_max - .data[[total_col]])
+        df_canvas_adj %>% group_by(grade) %>% summarise(n=n())
+        df_canvas_adj %>% filter(grade=="F")
         
         df_canvas_adj <- df_canvas_adj %>% 
           mutate(pre_percent=pre_points/current_max)
@@ -202,6 +204,9 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
                   event_title(),
                   file_name
                 )
+                ##DEBUG
+                #browser()
+                #print(gs_data$ppt, target= "test/ppt.pptx")
                 
                 
         setProgress(1, detail = paste("Complete!"))

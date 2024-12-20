@@ -63,6 +63,8 @@ gs_makebriefmain <- function(question_list,df_canvas_adj,missing_roster,cuts_df,
   
   ##2. Loop through each question group ----
   for (df_name in names(question_list)) {
+    #browser()
+    incProgress(1/progress.tot, detail = paste0("Making Question slide ", df_name))
     
     question_df <- question_list[[df_name]]
     
@@ -641,7 +643,7 @@ ppt_versioncomp <- function(ppt, df_canvas_adj,eventTitle){
                   location = ph_location(left=right_col_start,
                                          top=right_top_start+plot_height+padding,
                                          width=right_width))
-   print(ppt,target = "test.pptx")
+   #print(ppt,target = "test.pptx")
    
    
    
@@ -652,6 +654,14 @@ ppt_versioncomp <- function(ppt, df_canvas_adj,eventTitle){
 #q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version_palette[i],bin.width)
 #df = question_df
 plot_question <- function(df,max_pts){
+  #browser()
+  #here I want to check the length of the df legend
+  #if I exceed the length of the version_palette then I want to set version_palette to a longer color palette
+  version_palette_q <- version_palette
+  #browser()
+  if(length(unique(df$label)) > length(version_palette_q)){
+    version_palette_q <- colorRampPalette(c("green","orange"))(length(unique(df$label)))
+  }
   
   col <- "percent"
   xaxis <- "Score (%)"
@@ -667,8 +677,8 @@ plot_question <- function(df,max_pts){
     geom_density(alpha = 0.08, adjust = 0.3, 
                  aes(y = after_stat(density)), size = 1.1) +  # Use density for normalized comparison
     theme_classic() +
-    scale_color_manual(values = version_palette) +
-    scale_fill_manual(values = version_palette) +
+    scale_color_manual(values = version_palette_q) +
+    scale_fill_manual(values = version_palette_q) +
     labs(x = xaxis, y = "Density", fill = NULL, color = NULL) +
     scale_x_continuous(
       name = xaxis, 
@@ -774,13 +784,19 @@ summary_table_question <- function(df){
 ##2D. Cut Table ----
 cuts_table <- function(question_df,cuts_df,cut_filter_threshold){
   q_names <- unique(question_df$name)
+  #browser()
+  cuts_df <- cuts_df %>% mutate(key = paste0(number,": ",question))
   
+  #filter cuts_df based on matches to q_names
   cuts_df_filtered <- cuts_df %>%
-    filter(sapply(question, function(q) any(agrepl(q, q_names, max.distance = 0.2))) ) 
+    filter(sapply(key, function(q) any(agrepl(q, q_names, max.distance = 0.1))) )
+  
+  #cuts_df_filtered <- cuts_df %>%
+  #  filter(sapply(question, function(q) any(agrepl(q, q_names, max.distance = 0.2))) ) 
   
   if(nrow(cuts_df_filtered) == 0){
     cuts_df_filtered <- cuts_df %>%
-      filter(sapply(question, function(q) any(agrepl(q, q_names, max.distance = 2))) ) 
+      filter(sapply(key, function(q) any(agrepl(q, q_names, max.distance = 0.2))) )
     
   }
   #filter out the cuts that are less than 15 percent
