@@ -1,24 +1,26 @@
 # UI -------------------------------------------------------
-tags$style(HTML("
-  .remove-button {
-    background-color: #ff6666;
-    border: none;
-    color: white;
-    font-weight: bold;
-    cursor: pointer;
-    padding: 2px 8px;
-    border-radius: 4px;
-  }
-  .remove-button:hover {
-    background-color: #cc0000;
-  }
-"))
+
 ## Drag and Drop JS ----
 # Inject JavaScript for drag-and-drop
 
 
 gs_scores_ui <- function() {
   tagList(
+    tags$style(HTML("
+      .remove-button {
+        background-color: #ff6666;
+        border: none;
+        color: white;
+        font-size: 10px;       /* Smaller font */
+        font-weight: bold;
+        cursor: pointer;
+        padding: 1px 6px;      /* Smaller padding */
+        border-radius: 4px;
+      }
+      .remove-button:hover {
+        background-color: #cc0000;
+      }
+    ")),
     ## Top Section: File Upload and Proceed Button -------------------------
     fluidRow(
       column(
@@ -55,36 +57,41 @@ gs_scores_ui <- function() {
               p("Drag and drop questions to create groups for analysis."),
               p("After adding a group rename it by clicking the group name and typing in the question concept being analyzed."),
             )
-          ),
-          fluidRow(
-            style = "display: flex; align-items: center;",
-            column(3, textInput("filter_keyword", "Enter keyword to filter:")),
-            column(2, actionButton("filter_button", "Filter Questions")),
-            column(3, selectInput("select_group", "Select Group", choices = NULL)),
-            column(2, actionButton("add_to_group", "Add Questions to Group"))
-          ),
-          fluidRow(
-            dataTableOutput("filtered_table"),
-          ),
-          fluidRow(
-            actionButton("add_group", "Add Question Group"),
-          ),
-          fluidRow(
-            uiOutput("groups_ui")
-          ),
-          fluidRow(
-            h3("Questions from Excel, Grouped by Version"),
-            uiOutput("excel_questions_ui")
+          ),  
+          sidebarLayout(
+            sidebarPanel(
+              h4("Question Groups"),
+              uiOutput("groups_ui"),  # ← your group containers go here
+              width = 4               # optional: sidebar width (default is 4)
+            ),
+          mainPanel(
+            fluidRow(
+              style = "display: flex; align-items: center;",
+              column(3, textInput("filter_keyword", "Enter keyword to filter:")),
+              column(2, actionButton("filter_button", "Filter Questions")),
+              column(3, selectInput("select_group", "Select Group", choices = NULL)),
+              column(2, actionButton("add_to_group", "Add Questions to Group"))
+            ),
+            fluidRow(
+              dataTableOutput("filtered_table"),
+            ),
+            fluidRow(
+              actionButton("add_group", "Add Question Group"),
+            ),
+            fluidRow(
+              h3("Questions from Excel, Grouped by Version"),
+              uiOutput("excel_questions_ui")
+            ),
           ),
         ),
-        tabPanel(
-          "Exam Roster",
-          h4("Check Exam Roster"),
-          p("Check the uploaded roster for correctness."),
-          div(
-            id = "gs_examroster", # id is for toggling, but not needed on this tab.
-            dataTableOutput("gs_examroster")
-          ),
+      ),        
+      tabPanel(
+        "Exam Roster",
+        h4("Check Exam Roster"),
+        p("Check the uploaded roster for correctness."),
+        div(
+          id = "gs_examroster", # id is for toggling, but not needed on this tab.
+          dataTableOutput("gs_examroster")
         ),
       ),
     ),
@@ -139,7 +146,7 @@ gs_scores_ui <- function() {
 
 "))
   )
-}
+)}
 
 # Server ----
 
@@ -214,6 +221,8 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     df <- question_titles()
     # list of the question titles (from the headers)
     question_titles(list(pool = question_pool, groups = list()))
+    
+   
   })
 
   ## Excel version selector ----
@@ -253,6 +262,49 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
 
     df <- df %>% mutate(version = input$selected_version)
     # browser()
+    #browser()
+    #a <- question_titles()
+    #names(question_titles()$pool[1])
+    ## ADDED 16MAY ----
+    # Goal is to make the first batch of question groups based on v1 input
+    # Since subsequent versions will have similar this just saves button pressing.
+    # Automatically create groups for the first file's questions
+    if(current_index==1){
+      first_file <- names(question_titles()$pool[1])
+      first_questions <- question_titles()$pool[[first_file]]
+      version_label <- paste0("v", input$selected_version)
+      
+      # Initialize new groups list
+      auto_groups <- list()
+      grouped_questions <- list()
+      
+      for (q in first_questions) {
+        group_id=q
+        group_id <- gsub("(?<=\\d)\\.0\\b", "", group_id, perl = TRUE)
+        group_id <- gsub("[^[:alnum:] ]+", "", group_id )     # Keep alnum + space
+        group_id <- gsub(" +", " ", group_id)                    # Collapse whitespace
+        group_id <- trimws(group_id)
+        full_id <- paste(first_file, q, version_label, sep = "::")
+        auto_groups[[group_id]] <- full_id
+        grouped_questions[[group_id]] <- c(full_id)
+      }
+      
+      # Update question_titles() with these groups
+      existing <- question_titles()
+      existing$groups <- auto_groups
+      # Remove the added questions from the pool
+      existing$pool[[first_file]] <- setdiff(existing$pool[[first_file]], first_questions)
+      question_titles(existing)
+      
+      # Update the named list of empty groups
+      group_names <- setNames(vector("list", length(auto_groups)), names(auto_groups))
+      question_groups(group_names)
+      
+      # Open all by default in details_state_groups
+      state <- lapply(names(auto_groups), function(nm) paste0("details_", nm))
+      details_state_groups(setNames(as.list(rep(TRUE, length(state))), state)) 
+    }
+    #### END ADDED 16MAY ----
     # I want to select the columnnames that match the admin_matches
     matches <- as.character(admin_matches())
 
@@ -613,58 +665,49 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     column_width <- max(12 %/% num_groups, 3) # Calculate column width (minimum width of 3)
 
     tags$div(
-      fluidRow(
-        lapply(names(question_groups()), function(group) {
-          column(
-            width = column_width,
-            tags$details(
-              id = paste0("details_", group),
-              open = if (!is.null(open_states[[paste0("details_", group)]])) {
-                open_states[[paste0("details_", group)]]
-              } else {
-                TRUE
-              }, # Default to open if no state is tracked
-              style = "margin-bottom: 10px; border: 1px solid #333; padding: 10px; background: #f9f9f9;",
-              tags$summary(
-                style = "font-weight: bold; cursor: pointer;",
-                textInput(
-                  inputId = paste0("edit_group_name_", group),
-                  label = NULL,
-                  value = group,
-                  width = "100%"
-                )
-              ),
-              # Droppable area for the group
+      style = "display: flex; flex-direction: column; gap: 6px;",
+      lapply(names(question_groups()), function(group) {
+        tags$div(
+          id = paste0("details_", group),
+          open = if (!is.null(open_states[[paste0("details_", group)]])) {
+            open_states[[paste0("details_", group)]]
+          } else {
+            TRUE
+          },
+          #STYLE FOR
+          style = "border: 1px solid #333; padding: 8px; background-color: #ccc4ad; border-radius: 6px;",            
+          textInput(
+            inputId = paste0("edit_group_name_", group),
+            label = NULL,
+            value = group,
+            width = "100%"
+          ),
+          tags$div(
+            id = group,
+            ondrop = paste0("drop(event, '", group, "')"),
+            ondragover = "allowDrop(event)",
+            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: space-between;",            lapply(current_questions$groups[[group]], function(header_info) {
+              header_parts <- strsplit(header_info, "::")[[1]]
+              file_name <- header_parts[1]
+              header <- header_parts[2]
+              version <- header_parts[3]
               tags$div(
-                id = group,
-                ondrop = paste0("drop(event, '", group, "')"), # Drop handler
-                ondragover = "allowDrop(event)", # Allow drag over
-                style = "border: 1px dashed #333; padding: 10px; min-height: 50px;",
-                # List of questions in the group
-                lapply(current_questions$groups[[group]], function(header_info) {
-                  header_parts <- strsplit(header_info, "::")[[1]]
-                  file_name <- header_parts[1]
-                  header <- header_parts[2]
-                  version <- header_parts[3]
-                  tags$div(
-                    id = header_info,
-                    class = "draggable",
-                    draggable = "true",
-                    ondragstart = "drag(event)", # Drag handler
-                    style = "padding: 5px; margin: 5px; background: #fff; border: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between;",
-                    tags$span(paste(header, version)),
-                    tags$button(
-                      class = "remove-button",
-                      onclick = paste0("Shiny.onInputChange('remove_question', {header: '", header_info, "'})"),
-                      "X"
-                    )
-                  )
-                })
+                id = header_info,
+                class = "draggable",
+                draggable = "true",
+                ondragstart = "drag(event)",
+                style = "padding: 4px; margin: 4px 0; background: #fff; border: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between;",
+                tags$span(style = "font-size: 12px;", paste(header, version)), #16MAY                
+                tags$button(
+                  class = "remove-button",
+                  onclick = paste0("Shiny.onInputChange('remove_question', {header: '", header_info, "'})"),
+                  "X"
+                )
               )
-            )
+            })
           )
-        })
-      )
+        )
+      })
     )
   })
 

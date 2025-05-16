@@ -657,12 +657,13 @@ plot_question <- function(df,max_pts){
   #browser()
   #here I want to check the length of the df legend
   #if I exceed the length of the version_palette then I want to set version_palette to a longer color palette
+  
   version_palette_q <- version_palette
-  #browser()
-  if(length(unique(df$label)) > length(version_palette_q)){
+
+    if(length(unique(df$label)) > length(version_palette_q)){
     version_palette_q <- colorRampPalette(c("green","orange"))(length(unique(df$label)))
   }
-  
+  if(length(unique(df$value))>6){
   col <- "percent"
   xaxis <- "Score (%)"
   yaxis <- "Count"
@@ -671,7 +672,6 @@ plot_question <- function(df,max_pts){
   max_pts <- max(df$max)
   
   df$legend <- str_c(df$version," - Q",df$name)
-  
   # Create the histogram with color grouping
   q.score.plot <- ggplot(df, aes(x = get(col), color = legend, fill = legend)) +
     geom_density(alpha = 0.08, adjust = 0.3, 
@@ -707,8 +707,62 @@ plot_question <- function(df,max_pts){
       color = guide_legend(ncol = 1),  # Arrange legend items in 1 column
       fill = guide_legend(ncol = 1)
     )
+  } else {    #ADDED 16MAY HISTO PLOT
+
+    col <- "score"  # Primary axis in points
+    xaxis <- "Score (Points)"
+    max_pts <- max(df$max)  # Make sure this reflects the actual max points
+    
+    df$legend <- str_c(df$version, " - Q", df$name)
+    df$score <- df$percent * max(df$max, na.rm = TRUE) / 100
+    
+  df_hist <- df %>%
+    group_by(legend, value) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(legend) %>%
+    mutate(percent = count / sum(count) * 100)
   
+
+  q.score.plot <- ggplot(df_hist, aes(x = value, y = percent, fill = legend)) +
+    geom_col(
+      position = position_dodge(width = 0.6),
+      width = 0.6,
+      color = "black",
+      alpha = 0.6
+    )+
+    theme_classic() +
+    scale_fill_manual(values = version_palette_q) +
+    labs(x = "Score (Points)", y = "Percent of Students", fill = NULL) +
+    scale_x_continuous(
+      breaks = seq(0, max(df$value, na.rm = TRUE), 1),
+      sec.axis = sec_axis(
+        trans = ~ . / max_pts * 100,
+        name = "Score (%)"
+      )
+    ) +
+    scale_y_continuous(
+      breaks = seq(0, 100, 10),  # Grid and tick marks every 10%
+      limits = c(0, 100),        # Optional: cap at 100%
+      expand = expansion(mult = c(0, 0.05))  # Optional: small padding at top
+    )+
+    geom_vline(xintercept = c(0.6, 0.76, 0.88) * max_pts, 
+               linewidth = 0.8, alpha = 0.4, linetype = "longdash", 
+               color = c("red", "blue", "forestgreen")) +
+    theme(
+      text = element_text(size = 16),
+      legend.text = element_text(size = 10),
+      legend.title = element_text(size = 14),
+      legend.position = c(0.025, 0.925),
+      legend.justification = c(0, 1),
+      legend.background = element_rect(fill = "white", color = "black"),
+      legend.box.background = element_rect(color = "black", linewidth = 0.8),
+      panel.grid.major.y = element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor.y = element_blank(),  # Optional: turn off minor lines
+      panel.grid.major.x = element_blank(),  # Optional: no vertical grid lines
+    ) +
+    guides(fill = guide_legend(ncol = 1))
   
+  }
   # Display the plot
   #print(q.score.plot)
   
