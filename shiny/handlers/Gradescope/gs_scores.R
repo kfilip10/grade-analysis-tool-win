@@ -21,6 +21,51 @@ gs_scores_ui <- function() {
         background-color: #cc0000;
       }
     ")),
+    
+    
+    tags$div(
+      id = "floating_group_panel",
+      style = "
+    position: fixed;
+    top: 100px;
+    right: 10px;
+    width: 240px;
+    background-color: #f3f3f3;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    z-index: 9999;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  ",
+      tags$div(
+        id = "floating_group_header",
+        style = "display: flex; justify-content: space-between; align-items: center; background: #E3D4BA; padding: 6px; cursor: move;",
+        tags$span("Question Groups"),
+        tags$button(
+          id = "collapse_btn",
+          onclick = "
+        var content = document.getElementById('floating_group_content');
+        content.style.display = (content.style.display === 'none') ? 'block' : 'none';
+      ",
+          style = "font-size: 16px; padding: 2px 6px;",
+          "⯆"
+        )
+      ),
+      p(HTML(
+        "<span style='font-size: 11pt;'>
+          Drag questions here.<br>
+          Group together.<br>
+          Drag panel as needed.
+        </span>"
+      )),
+      tags$div(
+        id = "floating_group_content",
+        style = "padding: 10px; max-height: 70vh; overflow-y: auto;",
+        uiOutput("floating_groups_ui")
+      )
+    ),
+    
+    
+    
     ## Top Section: File Upload and Proceed Button -------------------------
     fluidRow(
       column(
@@ -143,6 +188,46 @@ gs_scores_ui <- function() {
       Shiny.setInputValue('details_state_groups', allDetails, {priority: 'event'});
     });
   });
+  
+    // Make the floating panel draggable
+  dragElement(document.getElementById('floating_group_panel'));
+
+  function dragElement(elmnt) {
+    var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    var header = document.getElementById('floating_group_header');
+    if (header) {
+      header.onmousedown = dragMouseDown;
+    }
+
+    function dragMouseDown(e) {
+      e = e || window.event;
+      e.preventDefault();
+      // Get the mouse cursor position at startup:
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      document.onmouseup = closeDragElement;
+      document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+      e = e || window.event;
+      e.preventDefault();
+      // Calculate the new cursor position:
+      pos1 = pos3 - e.clientX;
+      pos2 = pos4 - e.clientY;
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      // Set the element's new position:
+      elmnt.style.top = (elmnt.offsetTop - pos2) + 'px';
+      elmnt.style.left = (elmnt.offsetLeft - pos1) + 'px';
+    }
+
+    function closeDragElement() {
+      // Stop moving when mouse button is released:
+      document.onmouseup = null;
+      document.onmousemove = null;
+    }
+  }
 
 "))
   )
@@ -595,6 +680,21 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
 
   ## Question Grouping -------------------------------------------------------
   ##
+  output$floating_groups_ui <- renderUI({
+    req(question_groups())
+    
+    lapply(names(question_groups()), function(group) {
+      tags$div(
+        id = paste0("floating_", group),
+        ondrop = paste0("drop(event, '", group, "')"),
+        ondragover = "allowDrop(event)",
+        style = "margin: 6px 0; padding: 8px; background: #E3D4BA; border: 3px solid #000000; border-radius: 4px; font-size: 16px; text-align: center; cursor: pointer;",
+        group
+      )
+    })
+
+  })
+  
   observeEvent(input$add_group, {
     # Show a modal to name the new group
     showModal(modalDialog(
@@ -666,27 +766,37 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
 
     tags$div(
       style = "display: flex; flex-direction: column; gap: 6px;",
+      #for each question group
       lapply(names(question_groups()), function(group) {
         tags$div(
           id = paste0("details_", group),
-          open = if (!is.null(open_states[[paste0("details_", group)]])) {
-            open_states[[paste0("details_", group)]]
-          } else {
-            TRUE
-          },
-          #STYLE FOR
-          style = "border: 1px solid #333; padding: 8px; background-color: #ccc4ad; border-radius: 6px;",            
-          textInput(
-            inputId = paste0("edit_group_name_", group),
-            label = NULL,
-            value = group,
-            width = "100%"
+          style = "border: 1px solid #333; padding: 8px; background-color: #ccc4ad; border-radius: 6px;",
+          
+          # FLEX container for input + delete button
+          tags$div(
+            style = "display: flex; align-items: center; gap: 6px; margin-bottom: 6px;",
+            div(
+              style = "flex-grow: 1;",
+              textInput(
+                inputId = paste0("edit_group_name_", group),
+                label = NULL,
+                value = group,
+                width = "100%"
+              )
+            ),
+            tags$button(
+              class = "remove-button",
+              onclick = paste0("Shiny.setInputValue('trigger_delete_group', '", group, "', {priority: 'event'});"),
+              "X"
+            )
           ),
           tags$div(
             id = group,
             ondrop = paste0("drop(event, '", group, "')"),
             ondragover = "allowDrop(event)",
-            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: space-between;",            lapply(current_questions$groups[[group]], function(header_info) {
+            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; align-items: left; justify-content: space-between;",            
+            
+            lapply(current_questions$groups[[group]], function(header_info) {
               header_parts <- strsplit(header_info, "::")[[1]]
               file_name <- header_parts[1]
               header <- header_parts[2]
@@ -696,8 +806,11 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
                 class = "draggable",
                 draggable = "true",
                 ondragstart = "drag(event)",
-                style = "padding: 4px; margin: 4px 0; background: #fff; border: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between;",
-                tags$span(style = "font-size: 12px;", paste(header, version)), #16MAY                
+                style = "padding: 4px; margin: 4px 0; background: #fff; border: 1px solid #ddd; display: flex; align-items: left; justify-content: space-between;",
+                div(
+                  style = "width: 90%; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                  paste(header, version)
+                ),#16MAY                
                 tags$button(
                   class = "remove-button",
                   onclick = paste0("Shiny.onInputChange('remove_question', {header: '", header_info, "'})"),
@@ -755,7 +868,64 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     }
   })
 
-
+  ## Remove Question Group ----
+  observeEvent(input$trigger_delete_group, {
+    group_name <- input$trigger_delete_group
+    req(group_name)
+    
+    group_questions <- question_titles()$groups[[group_name]]
+    num_questions <- if (is.null(group_questions)) 0 else length(group_questions)
+    
+    msg <- if (num_questions > 0) {
+      paste0("This group contains ", num_questions, " question(s). Deleting it will return them to the pool. Are you sure?")
+    } else {
+      "Are you sure you want to delete this empty group?"
+    }
+    
+    showModal(modalDialog(
+      title = paste("Delete Group:", group_name),
+      p(msg),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_delete_group", "Delete", class = "btn-danger")
+      )
+    ))
+    
+    # Store the group name temporarily
+    session$userData$pending_delete_group <- group_name
+  })
+  
+  ## Confirm Delete Group ----
+  observeEvent(input$confirm_delete_group, {
+    group_to_delete <- session$userData$pending_delete_group
+    req(group_to_delete)
+    
+    updated_groups <- question_groups()
+    updated_titles <- question_titles()
+    updated_states <- details_state_groups()
+    
+    # Move questions back to pool
+    if (!is.null(updated_titles$groups[[group_to_delete]])) {
+      for (q in updated_titles$groups[[group_to_delete]]) {
+        parts <- strsplit(q, "::")[[1]]
+        file_name <- parts[1]
+        q_title <- parts[2]
+        updated_titles$pool[[file_name]] <- unique(c(updated_titles$pool[[file_name]], q_title))
+      }
+    }
+    
+    # Remove group
+    updated_groups[[group_to_delete]] <- NULL
+    updated_titles$groups[[group_to_delete]] <- NULL
+    updated_states[[paste0("details_", group_to_delete)]] <- NULL
+    
+    question_groups(updated_groups)
+    question_titles(updated_titles)
+    details_state_groups(updated_states)
+    
+    removeModal()
+  })
+  
 
   ## Remove question ----
   observeEvent(input$remove_question, {
