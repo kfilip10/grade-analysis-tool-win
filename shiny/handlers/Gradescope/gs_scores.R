@@ -350,46 +350,46 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     #browser()
     #a <- question_titles()
     #names(question_titles()$pool[1])
-    ## ADDED 16MAY ----
-    # Goal is to make the first batch of question groups based on v1 input
-    # Since subsequent versions will have similar this just saves button pressing.
-    # Automatically create groups for the first file's questions
-    if(current_index==1){
-      first_file <- names(question_titles()$pool[1])
-      first_questions <- question_titles()$pool[[first_file]]
-      version_label <- paste0("v", input$selected_version)
-      
-      # Initialize new groups list
-      auto_groups <- list()
-      grouped_questions <- list()
-      
-      for (q in first_questions) {
-        group_id=q
-        group_id <- gsub("(?<=\\d)\\.0\\b", "", group_id, perl = TRUE)
-        group_id <- gsub("[^[:alnum:] ]+", "", group_id )     # Keep alnum + space
-        group_id <- gsub(" +", " ", group_id)                    # Collapse whitespace
-        group_id <- trimws(group_id)
-        full_id <- paste(first_file, q, version_label, sep = "::")
-        auto_groups[[group_id]] <- full_id
-        grouped_questions[[group_id]] <- c(full_id)
-      }
-      
-      # Update question_titles() with these groups
-      existing <- question_titles()
-      existing$groups <- auto_groups
-      # Remove the added questions from the pool
-      existing$pool[[first_file]] <- setdiff(existing$pool[[first_file]], first_questions)
-      question_titles(existing)
-      
-      # Update the named list of empty groups
-      group_names <- setNames(vector("list", length(auto_groups)), names(auto_groups))
-      question_groups(group_names)
-      
-      # Open all by default in details_state_groups
-      state <- lapply(names(auto_groups), function(nm) paste0("details_", nm))
-      details_state_groups(setNames(as.list(rep(TRUE, length(state))), state)) 
-    }
-    #### END ADDED 16MAY ----
+    # ## ADDED 16MAY ----
+    # # Goal is to make the first batch of question groups based on v1 input
+    # # Since subsequent versions will have similar this just saves button pressing.
+    # # Automatically create groups for the first file's questions
+    # if(current_index==1){
+    #   first_file <- names(question_titles()$pool[1])
+    #   first_questions <- question_titles()$pool[[first_file]]
+    #   version_label <- paste0("v", input$selected_version)
+    #   
+    #   # Initialize new groups list
+    #   auto_groups <- list()
+    #   grouped_questions <- list()
+    #   
+    #   for (q in first_questions) {
+    #     group_id=q
+    #     group_id <- gsub("(?<=\\d)\\.0\\b", "", group_id, perl = TRUE)
+    #     group_id <- gsub("[^[:alnum:] ]+", "", group_id )     # Keep alnum + space
+    #     group_id <- gsub(" +", " ", group_id)                    # Collapse whitespace
+    #     group_id <- trimws(group_id)
+    #     full_id <- paste(first_file, q, version_label, sep = "::")
+    #     auto_groups[[group_id]] <- full_id
+    #     grouped_questions[[group_id]] <- c(full_id)
+    #   }
+    #   
+    #   # Update question_titles() with these groups
+    #   existing <- question_titles()
+    #   existing$groups <- auto_groups
+    #   # Remove the added questions from the pool
+    #   existing$pool[[first_file]] <- setdiff(existing$pool[[first_file]], first_questions)
+    #   question_titles(existing)
+    #   
+    #   # Update the named list of empty groups
+    #   group_names <- setNames(vector("list", length(auto_groups)), names(auto_groups))
+    #   question_groups(group_names)
+    #   
+    #   # Open all by default in details_state_groups
+    #   state <- lapply(names(auto_groups), function(nm) paste0("details_", nm))
+    #   details_state_groups(setNames(as.list(rep(TRUE, length(state))), state)) 
+    # }
+    # #### END ADDED 16MAY ----
     # I want to select the columnnames that match the admin_matches
     matches <- as.character(admin_matches())
 
@@ -794,7 +794,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
             id = group,
             ondrop = paste0("drop(event, '", group, "')"),
             ondragover = "allowDrop(event)",
-            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; align-items: left; justify-content: space-between;",            
+            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 6px;",        
             
             lapply(current_questions$groups[[group]], function(header_info) {
               header_parts <- strsplit(header_info, "::")[[1]]
@@ -806,7 +806,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
                 class = "draggable",
                 draggable = "true",
                 ondragstart = "drag(event)",
-                style = "padding: 4px; margin: 4px 0; background: #fff; border: 1px solid #ddd; display: flex; align-items: left; justify-content: space-between;",
+                style = "padding: 6px; margin: 4px; background: #fff; border: 1px solid #ddd; border-radius: 4px; min-width: 120px; max-width: 200px; flex-grow: 1;",
                 div(
                   style = "width: 90%; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                   paste(header, version)
