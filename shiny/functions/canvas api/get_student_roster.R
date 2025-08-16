@@ -2,9 +2,11 @@
 #' @req API token set
 #' @return df of all students in all courses with their point data and instructor info
 get_student_roster <- function(course_df, error_list, instructor.search.key = "instr") {
+  #browser()
+  #items <- get_course_items(course_id = 9882, item = "enrollments", include = "current_points")
+  
   withProgress(message = "Gathering Roster Data for All Courses", value = 0, {
     # error_list definition
-    
     enrollment.list <- lapply(unique(course_df$id), function(x, i) {
       incProgress(1 / length(unique(course_df$id)))
       tryCatch(
@@ -20,11 +22,13 @@ get_student_roster <- function(course_df, error_list, instructor.search.key = "i
       )
     }, i = seq_along(course_df))
   })
+  
   if (length(enrollment.list) == 0) {
     return(NULL)
   }
   
   enrollment_df <- do.call(rbind, enrollment.list)
+  #browser()
   
   # user.df <- do.call(rbind, user.list) %>%select(id,email) %>%rename(user_id=id) %>% distinct()
   # add email from user.df to enrollment_df
@@ -69,6 +73,9 @@ get_student_roster <- function(course_df, error_list, instructor.search.key = "i
   
   # add the course name (so we know section / hour info)
   st_comb <- merge(st_comb, course_df %>% select(course, section_hour, section, section_id), by.x = "section_id", by.y = "section_id")
+  
+  #in st_comb make email is lower case
+  st_comb$email <- tolower(st_comb$email)
   
   return(st_comb)
 }

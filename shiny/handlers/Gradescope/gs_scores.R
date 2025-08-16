@@ -715,8 +715,21 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     req(input$new_group_name) # Ensure a name is provided
     # I need to clean this of special characters
     new_group_name <- input$new_group_name
-    new_group_name <- gsub("[^[:alnum:]]", " ", new_group_name)
-
+    new_group_name <- gsub("[^[:alnum:]]", " ", new_group_name)  # Replace special chars with spaces
+    new_group_name <- gsub("\\s+", " ", new_group_name)          # Collapse multiple spaces
+    new_group_name <- trimws(new_group_name)                     # Remove leading/trailing spaces
+    
+    # Check if empty after cleaning
+    if (new_group_name == "") {
+      showModal(modalDialog(
+        title = "Invalid Group Name",
+        "Group name cannot be empty after removing special characters. Please provide a valid name.",
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
+    
     # Validate the group name
     current_groups <- question_groups()
     if (new_group_name %in% names(current_groups)) {

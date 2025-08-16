@@ -240,6 +240,9 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
 
   # reactive value for the course list only if the connection is successful
   course_list_df <- reactive({
+    # Add dependency on refresh trigger
+    refresh_trigger()
+
     if (input$navbarID == "canvas_panel") {
       if (!is.null(connection_status()) &&
         connection_status() == "Success") {
@@ -249,8 +252,8 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
           file_date <- file.info(SECTION_DEFAULTS_PATH)$mtime
           file_date <- as.Date(file_date)
           # if it is older than 60 days then ask if they want to reload the data
-          if (Sys.Date() - file_date > 14) {
-            # print("File is older than 14 days")
+          if (Sys.Date() - file_date > 10) {
+            # print("File is older than 10 days")
             load_section_start()
           } else {
             # if it is within 60 days then load the data
@@ -258,18 +261,23 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
           }
         } else {
           # if there isn't then get the section list data
-          load_section_start()
+          return(load_section_start())
         }
       } else {
-        NULL
+        return(NULL)
       }
     }
+    return(NULL) # Return NULL if not in the canvas panel or connection failed
   })
 
+  # Add a reactive trigger for the refresh button
+  refresh_trigger <- reactiveVal(0)
 
   # observe actionbutton to load the section data
   observeEvent(input$refreshSectionData, {
     load_section_start()
+
+    refresh_trigger(refresh_trigger() + 1) # Increment to trigger reactive
   })
 
   load_section_start <- function() {
@@ -287,7 +295,7 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
     withProgress(message = "Loading course data, please wait...", value = 0, {
       course_list_df <- get_course_list(include = c("sections", "total_students", "term"))
 
-
+      # browser()
       sections <- lapply(course_list_df$id, function(x) {
         incProgress(1 / length(unique(course_list_df$id)),
           detail = paste("Loading course data for course", x)
@@ -499,6 +507,18 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
   # loadAssignmentsCanvas button is clicked
   observeEvent(input$loadAssignmentsCanvas, {
     # require selected courses to be not NULL
+    # Check if courses are selected first
+    if (is.null(selected_courses()) || nrow(selected_courses()) == 0) {
+      showModal(modalDialog(
+        title = "No Courses Selected",
+        "You must select a course before loading assignments.",
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
+
+
     req(selected_courses())
 
     # if the connection is successful, then load the assignments
@@ -512,8 +532,7 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
     if (!is.null(connection_status()) && connection_status() == "Success" &&
       !is.null(selected_courses()) && length(selected_courses()) > 0) {
       # get the assignments
-      # Fix this so that it isnt duplicated
-      # browser()
+
       course_list <- course_list_df()
       df <- get_like_assignments(course_list %>% filter(id %in% selected_courses()$id))
 
@@ -653,7 +672,10 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
 
   # This can be used in the plotting function maybe
   course_gradebook <- reactiveVal()
+
   canvas_errorlist <- reactiveVal()
+
+
   observeEvent(input$load_canvas_data, {
     # req(input$assignmentCheckbox)
     # get the rosters for all courses if it hasn't been already
@@ -666,14 +688,17 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
       easyClose = FALSE
     ))
     if (is.null(roster_course_df())) {
-      # message to user to select assignments
-      roster_course_df(get_student_roster(
-        course_list_df() %>%
-          filter(id %in% selected_courses()$id),
-        canvas_errorlist, INSTRUCTOR_SEARCH_KEY
-      ))
+      # browser()
+
+      # improves search down to the actual selected
+      df <- course_list_df() %>% filter(section_id %in% selected_courses()$section_id)
+
+      roster_course_df(
+        get_student_roster(df, canvas_errorlist, INSTRUCTOR_SEARCH_KEY)
+      )
     }
     roster.course <- roster_course_df()
+    # browser()
     roster.course <- roster.course %>% mutate(
       `Max Points` = grades.unposted_current_points / grades.unposted_current_score * 100
     )
