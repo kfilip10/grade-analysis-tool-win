@@ -26,7 +26,7 @@ gs_createbrief_ui <- function(){
         h3("Download Brief"),
         
         shinyjs::disabled(downloadButton("gs_briefdownload", "Download Brief",
-                                style = "background-color: #3498db; color: #ffffff;width: 400px;")),
+                                style = "background-color: #28a745; color: #ffffff;width: 400px;")),
         h3("Proceed to Canvas Grades Upload"),
         actionButton("gs_brief_next", label = HTML("Confirm and Proceed <span class='arrow-icon'>&rarr;</span>")), 
                      
@@ -98,136 +98,238 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
     
     df_canvas(df_canvas_adj)
   })
-  
+    
   observeEvent(input$gs_createbriefbutton, {
 
-    req(event_title(), course_title())
-    
-    tryCatch({
+      req(event_title(), course_title())
       
-      withProgress(message = 'Generating brief', value = 0,min=0,max=1, {
-        #pdf <- cutSheet()
+      tryCatch({
         
-        ## Canvas roster prep ----
-        #DEBUG - loads a completed gs_data object for testing
-        #test  <- reactiveValuesToList(gs_data)
-        #saveRDS(test, "test/gs_data_complete.rds")
-        #gs_data <- readRDS("test/gs_data_complete.rds")
+        withProgress(message = 'Generating brief', value = 0,min=0,max=1, {
+          #pdf <- cutSheet()
+          
+          ## Canvas roster prep ----
+          #DEBUG - loads a completed gs_data object for testing
+          #test  <- reactiveValuesToList(gs_data)
+          #saveRDS(test, "test/gs_data_complete.rds")
+          #gs_data <- readRDS("test/gs_data_complete.rds")
 
-        #data frame of grades from canvas
-        ##DEBUG
+          #data frame of grades from canvas
+          ##DEBUG
+          
+          #browser()
+          
+          df_canvas_adj <- df_canvas()
+          
+          # Validate required data exists
+          if(is.null(df_canvas_adj) || nrow(df_canvas_adj) == 0) {
+            stop("Canvas roster data is missing or empty. Please ensure data is loaded properly.")
+          }
+          
+          ## Scores in canvas, back calc ----
+          if(input$scores_in_canvas){
+            tryCatch({
+            #if scores are in canvas adjust the roster to subtract the `score`
+            #TODO: It would be nice to have a way for the user to specify the column names for the total score and max points
+          #browser()
+          score_col <- grep(gs_data$score_column, 
+                            colnames(df_canvas_adj), 
+                            value = TRUE, 
+                            ignore.case = TRUE)
+          
+          total_col <- grep(gs_data$max_column, 
+                            colnames(df_canvas_adj), 
+                            value = TRUE, 
+                            ignore.case = TRUE)
+          
+          # Validate columns were found
+          if(length(score_col) == 0) {
+            stop(paste0("Score column '", gs_data$score_column, "' not found in the data. Please check the column name."))
+          }
+          
+          if(length(total_col) == 0) {
+            stop(paste0("Max points column '", gs_data$max_column, "' not found in the data. Please check the column name."))
+          }
+          
+          df_canvas_adj <- df_canvas_adj %>%
+            mutate(pre_points = pre_points - .data[[score_col]],
+                  current_max = current_max - .data[[total_col]])
+          df_canvas_adj %>% group_by(grade) %>% summarise(n=n())
+          df_canvas_adj %>% filter(grade=="F")
+          
+          df_canvas_adj <- df_canvas_adj %>% 
+            mutate(pre_percent=pre_points/current_max)
+          
+          df_canvas_adj$grade <- sapply(
+            df_canvas_adj$pre_percent,letter_grade,breaks,grades)
+          
+          df_canvas_adj$pre_percent <- df_canvas_adj$pre_percent*100
+          
+            }, error = function(e) {
+              # More specific error handling for scores in canvas section
+              error_msg <- paste0("Error processing Canvas scores: ", e$message)
+              
+              if (grepl("score_col|Score column", e$message)) {
+                error_msg <- paste0(error_msg, "\n\nThe 'Total Score' column was not found. Please verify the column name matches exactly.")
+              }
+              if (grepl("total_col|Max points column", e$message)) {
+                error_msg <- paste0(error_msg, "\n\nThe 'Max Points' column was not found. Please verify the column name matches exactly.")
+              }
+              
+              stop(error_msg)
+            })
+          
+          #df_canvas <- df_canvas_adj %>% mutate
+          }
+          else{
+            #leave canvas scores as they are
+          }
+          
+          # Validate required columns exist for post-processing
+          required_cols <- c("Total Score", "Max Points")
+          missing_cols <- required_cols[!required_cols %in% colnames(df_canvas_adj)]
+          if(length(missing_cols) > 0) {
+            stop(paste0("Missing required columns: ", paste(missing_cols, collapse = ", "), ". Please check your Gradescope data."))
+          }
+          
+          df_canvas_adj <- df_canvas_adj %>% 
+            mutate(post_points = pre_points+`Total Score`,
+                  post_max = current_max+`Max Points`,
+                  post_percent = post_points/post_max,
+                  mge_percent = `Total Score`/`Max Points`)%>%
+            rename(pre_grade = grade)
+          
+          df_canvas_adj$mge_grade <- sapply(
+            df_canvas_adj$mge_percent,letter_grade,breaks,grades)
+          df_canvas_adj$post_grade <- sapply(
+            df_canvas_adj$post_percent,letter_grade,breaks,grades)
+          
+          df_canvas_adj$post_percent <- df_canvas_adj$post_percent*100
+          df_canvas_adj$mge_percent <- df_canvas_adj$mge_percent*100
+          
+          # Validate gs_data components exist
+          if(is.null(gs_data$gs_question_groups) || length(gs_data$gs_question_groups) == 0) {
+            stop("Question groups data is missing. Please ensure Gradescope data is properly loaded.")
+          }
+          
+          if(is.null(gs_data$cuts_df)) {
+            stop("Cuts data is missing. Please ensure Gradescope data is properly processed.")
+          }
+          
+          # rename gs_data$df_scoregroups to gs_data$gs_question_groups
+          question_df_list <- gs_data$gs_question_groups
+
+          file_name <- paste0("Grade Brief - ", course_title(), " - ", event_title(), ".pptx")
+          
+          progress.tot <- length(question_df_list)+3 #title,version summary, and ppt creation
+          
+          incProgress(1/progress.tot, detail = paste("Calling Function"))
+
+          # Validate function exists
+          if(!exists("gs_makebriefmain")) {
+            stop("Brief generation function 'gs_makebriefmain' not found. Please check if all required functions are loaded.")
+          }
+
+          gs_data$ppt <- gs_makebriefmain(
+            question_df_list,
+            df_canvas_adj,
+            gs_data$missing_roster, # data frame of missing grades
+            #DEBUG gs_data$cuts_df[[1]], # used if reading from RDS
+            gs_data$cuts_df, # data frame of cuts
+            cut_filter_threshold(),
+            progress.tot,
+            course_title(),
+            event_title(),
+            file_name
+          )
+          
+          # Validate PPT was created successfully
+          if(is.null(gs_data$ppt)) {
+            stop("Failed to generate PowerPoint presentation. Please check your data and try again.")
+          }
+          
+          ##DEBUG
+          #browser()
+          #print(gs_data$ppt, target= "test/ppt.pptx")
+          
+          setProgress(1, detail = paste("Complete!"))
+        })
         
-        #browser()
+        # Success actions
+        shinyjs::enable("gs_briefdownload")
         
-        df_canvas_adj <- df_canvas()
-        ## Scores in canvas, back calc ----
-        if(input$scores_in_canvas){
-          tryCatch({
-          #if scores are in canvas adjust the roster to subtract the `score`
-          #TODO: It would be nice to have a way for the user to specify the column names for the total score and max points
-        #browser()
-        score_col <- grep(gs_data$score_column, 
-                          colnames(df_canvas_adj), 
-                          value = TRUE, 
-                          ignore.case = TRUE)
+        # Success modal
+        showModal(modalDialog(
+          title = HTML("<span style='color: green;'>✓ Brief Created Successfully</span>"),
+          HTML(paste0(
+            "<p><strong>Brief generated successfully!</strong></p>",
+            "<p>Course: ", course_title(), "</p>",
+            "<p>Event: ", event_title(), "</p>",
+            "<p>You may now download the brief using the download button.</p>"
+          )),
+          easyClose = TRUE,
+          footer = tagList(
+            modalButton("Close"),
+            downloadButton("modal_download", "Download Now", 
+                          style = "background-color: #28a745; color: white;")
+          )
+        ))
         
-        total_col <- grep(gs_data$max_column, 
-                          colnames(df_canvas_adj), 
-                          value = TRUE, 
-                          ignore.case = TRUE)
+      }, error = function(e) {
+        # Error modal with detailed information
+        error_details <- e$message
         
-        df_canvas_adj <- df_canvas_adj %>%
-          mutate(pre_points = pre_points - .data[[score_col]],
-                 current_max = current_max - .data[[total_col]])
-        df_canvas_adj %>% group_by(grade) %>% summarise(n=n())
-        df_canvas_adj %>% filter(grade=="F")
-        
-        df_canvas_adj <- df_canvas_adj %>% 
-          mutate(pre_percent=pre_points/current_max)
-        
-        df_canvas_adj$grade <- sapply(
-          df_canvas_adj$pre_percent,letter_grade,breaks,grades)
-        
-        df_canvas_adj$pre_percent <- df_canvas_adj$pre_percent*100
-        
-          }, error = function(e) {
-            # Error handling: print a helpful error message
-            message("An error occurred: ", e$message)
-            if (exists("score_col") && length(score_col) == 0) {
-              message("The column 'total score' was not found in the uploaded excel scores.")
-            }
-            if (exists("total_col") && length(total_col) == 0) {
-              message("The column 'max points' was not found in the uploaded excel scores.")
-            }
-            # Optionally, stop execution or return a default value
-            stop("Error handling completed. Check the column names and try again.")
-          })
-        
-         #df_canvas <- df_canvas_adj %>% mutate
+        # Categorize error types for user-friendly messages
+        if(grepl("Canvas roster data is missing", error_details)) {
+          user_message <- "Canvas roster data is not loaded properly."
+          suggestion <- "Please go back to the Canvas integration tab and ensure your roster data is loaded correctly."
+        } else if(grepl("column.*not found", error_details, ignore.case = TRUE)) {
+          user_message <- "Required column not found in your data."
+          suggestion <- "Please check that your Gradescope export and Canvas data have the expected column names."
+        } else if(grepl("Question groups.*missing", error_details)) {
+          user_message <- "Gradescope question data is missing."
+          suggestion <- "Please ensure you have properly uploaded and processed your Gradescope data."
+        } else if(grepl("gs_makebriefmain.*not found", error_details)) {
+          user_message <- "Brief generation function is not available."
+          suggestion <- "This appears to be a system error. Please restart the application and try again."
+        } else {
+          user_message <- "An unexpected error occurred during brief generation."
+          suggestion <- "Please check your data inputs and try again. If the problem persists, contact support."
         }
-        else{
-          #leave canvas scores as they are
-        }
-        df_canvas_adj <- df_canvas_adj %>% 
-          mutate(post_points = pre_points+`Total Score`,
-                 post_max = current_max+`Max Points`,
-                 post_percent = post_points/post_max,
-                 mge_percent = `Total Score`/`Max Points`)%>%
-          rename(pre_grade = grade)
         
-        df_canvas_adj$mge_grade <- sapply(
-          df_canvas_adj$mge_percent,letter_grade,breaks,grades)
-        df_canvas_adj$post_grade <- sapply(
-          df_canvas_adj$post_percent,letter_grade,breaks,grades)
+        showModal(modalDialog(
+          title = HTML("<span style='color: red;'>⚠ Error Generating Brief</span>"),
+          HTML(paste0(
+            "<p><strong>", user_message, "</strong></p>",
+            "<p><em>Suggestion:</em> ", suggestion, "</p>",
+            "<hr>",
+            "<details>",
+            "<summary style='cursor: pointer;'>Technical Details (click to expand)</summary>",
+            "<pre style='background-color: #f8f9fa; padding: 10px; margin-top: 10px; white-space: pre-wrap; font-size: 12px;'>",
+            htmltools::htmlEscape(error_details),
+            "</pre>",
+            "</details>"
+          )),
+          easyClose = TRUE,
+          footer = modalButton("Close")
+        ))
         
-        df_canvas_adj$post_percent <- df_canvas_adj$post_percent*100
-        df_canvas_adj$mge_percent <- df_canvas_adj$mge_percent*100
-        
-        # rename gs_data$df_scoregroups to gs_data$gs_question_groups
-        question_df_list <- gs_data$gs_question_groups
-
-        file_name <- paste0("Grade Brief - ", course_title(), " - ", event_title(), ".pptx")
-        
-        progress.tot <- length(question_df_list)+3 #title,version summary, and ppt creation
-        
-        incProgress(1/progress.tot, detail = paste("Calling Function"))
-
-                gs_data$ppt <- gs_makebriefmain(
-                  question_df_list,
-                  df_canvas_adj,
-                  gs_data$missing_roster, # data frame of missing grades
-                  #DEBUG gs_data$cuts_df[[1]], # used if reading from RDS
-                  gs_data$cuts_df, # data frame of cuts
-                  cut_filter_threshold(),
-                  progress.tot,
-                  course_title(),
-                  event_title(),
-                  file_name
-                )
-                ##DEBUG
-                #browser()
-                #print(gs_data$ppt, target= "test/ppt.pptx")
-                
-                
-        setProgress(1, detail = paste("Complete!"))
+        # Log the error for debugging
+        cat("Brief generation error:", error_details, "\n")
       })
-      df_canvas_adj <- 
-      
-      shinyjs::enable("gs_briefdownload")
-      #browser()
-      # Automatically trigger download after creation
-      #shinyjs::runjs("$('#gs_briefdownload').trigger('click');")
-      showModal(modalDialog(
-        title = "Brief Created",
-        "The brief has been created, you may download the brief.",
-        easyClose = TRUE
-      ))
-
   })
-
-  
-  
-})
+# Add download handler for the modal download button
+output$modal_download <- downloadHandler(
+  filename = function() {
+    paste0("Brief - ", course_title(), " - ", event_title(), ".pptx")
+  },
+  content = function(file) {
+    if (is.null(gs_data$ppt)) {
+      return(NULL)
+    }
+    print(gs_data$ppt, target = file)
+  }
+)
 
 ## Download Brief ----
 output$gs_briefdownload <- downloadHandler(

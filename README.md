@@ -7,6 +7,20 @@ Electron: [[yarn]]
 - Debugging in browser()
 saveRDS(df,file ="env/uploaded template graded.rds")
 
+## Building - Dev Note
+- Add github token
+
+- yarn start
+	- check it works
+- Edit version to a new version
+	- package.json
+- yarn build
+- yarn dist
+	- this should publish to github
+- Set release to current / out of draft
+
+
+
 # 2 Overview
 
 This R Shiny application serves as a powerful tool for analyzing and visualizing exam grade data. It takes in raw exam scores grouped by question points, performs analysis, and generates a comprehensive PowerPoint presentation summarizing the results.

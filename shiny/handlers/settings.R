@@ -15,7 +15,9 @@ createSettingsPage <- function() {
     actionButton("editGradeBtn", "Edit Grade Thresholds"),
     actionButton("restoreDefaultGrades", "Restore Default Grade Thresholds"),
   )
-  
+  div(
+
+)
 }
 
 readGrades <- function() {

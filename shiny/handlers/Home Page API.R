@@ -21,6 +21,9 @@ createHomePage <- function() {
         ),
         tags$li("Download your briefing and review for completeness.")
       ),
+      h4("Help I have an error!"),
+      tags$p("If you are experiencing errors contact Kevin Filip at kevin.t.filip.mil@army.mil, kfilip10@gmail.com, or 630-391-3587."),
+       tags$p("He will likely ask you to try the task again with the R console visible and provide the output during the error. This can be done by selecting 'Debug' at the top left of the window and selecting 'show R console' and then doing the task again."),
       # tags$hr(),
       # h4("Tab details:"
       # ),

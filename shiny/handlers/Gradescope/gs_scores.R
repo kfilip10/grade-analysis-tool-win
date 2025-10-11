@@ -21,8 +21,6 @@ gs_scores_ui <- function() {
         background-color: #cc0000;
       }
     ")),
-    
-    
     tags$div(
       id = "floating_group_panel",
       style = "
@@ -63,9 +61,9 @@ gs_scores_ui <- function() {
         uiOutput("floating_groups_ui")
       )
     ),
-    
-    
-    
+
+
+
     ## Top Section: File Upload and Proceed Button -------------------------
     fluidRow(
       column(
@@ -102,45 +100,46 @@ gs_scores_ui <- function() {
               p("Drag and drop questions to create groups for analysis."),
               p("After adding a group rename it by clicking the group name and typing in the question concept being analyzed."),
             )
-          ),  
+          ),
           sidebarLayout(
             sidebarPanel(
               h4("Question Groups"),
-              uiOutput("groups_ui"),  # ← your group containers go here
-              width = 4               # optional: sidebar width (default is 4)
+              uiOutput("groups_ui"), # ← your group containers go here
+              width = 4 # optional: sidebar width (default is 4)
             ),
-          mainPanel(
-            fluidRow(
-              style = "display: flex; align-items: center;",
-              column(3, textInput("filter_keyword", "Enter keyword to filter:")),
-              column(2, actionButton("filter_button", "Filter Questions")),
-              column(3, selectInput("select_group", "Select Group", choices = NULL)),
-              column(2, actionButton("add_to_group", "Add Questions to Group"))
-            ),
-            fluidRow(
-              dataTableOutput("filtered_table"),
-            ),
-            fluidRow(
-              actionButton("add_group", "Add Question Group"),
-            ),
-            fluidRow(
-              h3("Questions from Excel, Grouped by Version"),
-              uiOutput("excel_questions_ui")
+            mainPanel(
+              fluidRow(
+                style = "display: flex; align-items: center;",
+                column(3, textInput("filter_keyword", "Enter keyword to filter:")),
+                column(2, actionButton("filter_button", "Filter Questions")),
+                column(3, selectInput("select_group", "Select Group", choices = NULL)),
+                column(2, actionButton("add_to_group", "Add Questions to Group"))
+              ),
+              fluidRow(
+                dataTableOutput("filtered_table"),
+              ),
+              fluidRow(
+                actionButton("add_group", "Add Question Group"),
+                actionButton("auto_group_v1", "Auto-Group Version 1 Questions", class = "btn-info"),
+              ),
+              fluidRow(
+                h3("Questions from Excel, Grouped by Version"),
+                uiOutput("excel_questions_ui")
+              ),
             ),
           ),
         ),
-      ),        
-      tabPanel(
-        "Exam Roster",
-        h4("Check Exam Roster"),
-        p("Check the uploaded roster for correctness."),
-        div(
-          id = "gs_examroster", # id is for toggling, but not needed on this tab.
-          dataTableOutput("gs_examroster")
+        tabPanel(
+          "Exam Roster",
+          h4("Check Exam Roster"),
+          p("Check the uploaded roster for correctness."),
+          div(
+            id = "gs_examroster", # id is for toggling, but not needed on this tab.
+            dataTableOutput("gs_examroster")
+          ),
         ),
       ),
-    ),
-    tags$script(HTML("
+      tags$script(HTML("
     function allowDrop(event) {
       event.preventDefault();
       console.log('Allow drop: ', event.target.id); // Log the ID of the target where the item is dragged over
@@ -188,7 +187,7 @@ gs_scores_ui <- function() {
       Shiny.setInputValue('details_state_groups', allDetails, {priority: 'event'});
     });
   });
-  
+
     // Make the floating panel draggable
   dragElement(document.getElementById('floating_group_panel'));
 
@@ -230,8 +229,9 @@ gs_scores_ui <- function() {
   }
 
 "))
+    )
   )
-)}
+}
 
 # Server ----
 
@@ -306,8 +306,6 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     df <- question_titles()
     # list of the question titles (from the headers)
     question_titles(list(pool = question_pool, groups = list()))
-    
-   
   })
 
   ## Excel version selector ----
@@ -347,9 +345,9 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
 
     df <- df %>% mutate(version = input$selected_version)
     # browser()
-    #browser()
-    #a <- question_titles()
-    #names(question_titles()$pool[1])
+    # browser()
+    # a <- question_titles()
+    # names(question_titles()$pool[1])
     # ## ADDED 16MAY ----
     # # Goal is to make the first batch of question groups based on v1 input
     # # Since subsequent versions will have similar this just saves button pressing.
@@ -358,11 +356,11 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     #   first_file <- names(question_titles()$pool[1])
     #   first_questions <- question_titles()$pool[[first_file]]
     #   version_label <- paste0("v", input$selected_version)
-    #   
+    #
     #   # Initialize new groups list
     #   auto_groups <- list()
     #   grouped_questions <- list()
-    #   
+    #
     #   for (q in first_questions) {
     #     group_id=q
     #     group_id <- gsub("(?<=\\d)\\.0\\b", "", group_id, perl = TRUE)
@@ -373,21 +371,21 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     #     auto_groups[[group_id]] <- full_id
     #     grouped_questions[[group_id]] <- c(full_id)
     #   }
-    #   
+    #
     #   # Update question_titles() with these groups
     #   existing <- question_titles()
     #   existing$groups <- auto_groups
     #   # Remove the added questions from the pool
     #   existing$pool[[first_file]] <- setdiff(existing$pool[[first_file]], first_questions)
     #   question_titles(existing)
-    #   
+    #
     #   # Update the named list of empty groups
     #   group_names <- setNames(vector("list", length(auto_groups)), names(auto_groups))
     #   question_groups(group_names)
-    #   
+    #
     #   # Open all by default in details_state_groups
     #   state <- lapply(names(auto_groups), function(nm) paste0("details_", nm))
-    #   details_state_groups(setNames(as.list(rep(TRUE, length(state))), state)) 
+    #   details_state_groups(setNames(as.list(rep(TRUE, length(state))), state))
     # }
     # #### END ADDED 16MAY ----
     # I want to select the columnnames that match the admin_matches
@@ -682,7 +680,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
   ##
   output$floating_groups_ui <- renderUI({
     req(question_groups())
-    
+
     lapply(names(question_groups()), function(group) {
       tags$div(
         id = paste0("floating_", group),
@@ -692,9 +690,8 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
         group
       )
     })
-
   })
-  
+
   observeEvent(input$add_group, {
     # Show a modal to name the new group
     showModal(modalDialog(
@@ -715,10 +712,10 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     req(input$new_group_name) # Ensure a name is provided
     # I need to clean this of special characters
     new_group_name <- input$new_group_name
-    new_group_name <- gsub("[^[:alnum:]]", " ", new_group_name)  # Replace special chars with spaces
-    new_group_name <- gsub("\\s+", " ", new_group_name)          # Collapse multiple spaces
-    new_group_name <- trimws(new_group_name)                     # Remove leading/trailing spaces
-    
+    new_group_name <- gsub("[^[:alnum:]]", " ", new_group_name) # Replace special chars with spaces
+    new_group_name <- gsub("\\s+", " ", new_group_name) # Collapse multiple spaces
+    new_group_name <- trimws(new_group_name) # Remove leading/trailing spaces
+
     # Check if empty after cleaning
     if (new_group_name == "") {
       showModal(modalDialog(
@@ -729,7 +726,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
       ))
       return()
     }
-    
+
     # Validate the group name
     current_groups <- question_groups()
     if (new_group_name %in% names(current_groups)) {
@@ -779,12 +776,12 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
 
     tags$div(
       style = "display: flex; flex-direction: column; gap: 6px;",
-      #for each question group
+      # for each question group
       lapply(names(question_groups()), function(group) {
         tags$div(
           id = paste0("details_", group),
           style = "border: 1px solid #333; padding: 8px; background-color: #ccc4ad; border-radius: 6px;",
-          
+
           # FLEX container for input + delete button
           tags$div(
             style = "display: flex; align-items: center; gap: 6px; margin-bottom: 6px;",
@@ -807,8 +804,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
             id = group,
             ondrop = paste0("drop(event, '", group, "')"),
             ondragover = "allowDrop(event)",
-            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 6px;",        
-            
+            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 6px;",
             lapply(current_questions$groups[[group]], function(header_info) {
               header_parts <- strsplit(header_info, "::")[[1]]
               file_name <- header_parts[1]
@@ -823,7 +819,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
                 div(
                   style = "width: 90%; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                   paste(header, version)
-                ),#16MAY                
+                ), # 16MAY
                 tags$button(
                   class = "remove-button",
                   onclick = paste0("Shiny.onInputChange('remove_question', {header: '", header_info, "'})"),
@@ -885,16 +881,16 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
   observeEvent(input$trigger_delete_group, {
     group_name <- input$trigger_delete_group
     req(group_name)
-    
+
     group_questions <- question_titles()$groups[[group_name]]
     num_questions <- if (is.null(group_questions)) 0 else length(group_questions)
-    
+
     msg <- if (num_questions > 0) {
       paste0("This group contains ", num_questions, " question(s). Deleting it will return them to the pool. Are you sure?")
     } else {
       "Are you sure you want to delete this empty group?"
     }
-    
+
     showModal(modalDialog(
       title = paste("Delete Group:", group_name),
       p(msg),
@@ -903,20 +899,20 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
         actionButton("confirm_delete_group", "Delete", class = "btn-danger")
       )
     ))
-    
+
     # Store the group name temporarily
     session$userData$pending_delete_group <- group_name
   })
-  
+
   ## Confirm Delete Group ----
   observeEvent(input$confirm_delete_group, {
     group_to_delete <- session$userData$pending_delete_group
     req(group_to_delete)
-    
+
     updated_groups <- question_groups()
     updated_titles <- question_titles()
     updated_states <- details_state_groups()
-    
+
     # Move questions back to pool
     if (!is.null(updated_titles$groups[[group_to_delete]])) {
       for (q in updated_titles$groups[[group_to_delete]]) {
@@ -926,19 +922,19 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
         updated_titles$pool[[file_name]] <- unique(c(updated_titles$pool[[file_name]], q_title))
       }
     }
-    
+
     # Remove group
     updated_groups[[group_to_delete]] <- NULL
     updated_titles$groups[[group_to_delete]] <- NULL
     updated_states[[paste0("details_", group_to_delete)]] <- NULL
-    
+
     question_groups(updated_groups)
     question_titles(updated_titles)
     details_state_groups(updated_states)
-    
+
     removeModal()
   })
-  
+
 
   ## Remove question ----
   observeEvent(input$remove_question, {
@@ -971,7 +967,100 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
   })
 
 
+  observeEvent(input$auto_group_v1, {
+    req(gs_score_files()) # Ensure files are uploaded
 
+    current_questions <- question_titles()
+
+    # Find the file with version 1
+    v1_file <- NULL
+    for (file_name in names(file_versions$versions)) {
+      if (file_versions$versions[[file_name]] == "1") {
+        v1_file <- file_name
+        break
+      }
+    }
+
+    if (is.null(v1_file)) {
+      showModal(modalDialog(
+        title = "No Version 1 Found",
+        "No file with Version 1 was found. Please ensure you have uploaded and assigned Version 1 to a file.",
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
+
+    # Get questions from version 1 file that are still in the pool
+    v1_questions <- current_questions$pool[[v1_file]]
+
+    if (length(v1_questions) == 0) {
+      showModal(modalDialog(
+        title = "No Version 1 Questions Available",
+        "All Version 1 questions have already been grouped.",
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
+
+    # Get current groups to avoid duplicates
+    current_groups <- question_groups()
+
+    # Create groups for each V1 question
+    new_groups <- list()
+    updated_questions <- current_questions
+
+    for (question in v1_questions) {
+      # Create a clean group name from the question
+      group_name <- question
+      group_name <- gsub("(?<=\\d)\\.0\\b", "", group_name, perl = TRUE) # Remove .0 after digits
+      group_name <- gsub("[^[:alnum:] ]+", "", group_name) # Keep alnum + space
+      group_name <- gsub("\\s+", " ", group_name) # Collapse whitespace
+      group_name <- trimws(group_name) # Remove leading/trailing spaces
+
+      # Ensure unique group name
+      original_name <- group_name
+      counter <- 1
+      while (group_name %in% names(current_groups) || group_name %in% names(new_groups)) {
+        group_name <- paste0(original_name, "_", counter)
+        counter <- counter + 1
+      }
+
+      # Create the question identifier with version
+      version_label <- "v1"
+      question_id <- paste(v1_file, question, version_label, sep = "::")
+
+      # Add to new groups
+      new_groups[[group_name]] <- question_id
+
+      # Remove from pool
+      updated_questions$pool[[v1_file]] <- setdiff(updated_questions$pool[[v1_file]], question)
+
+      # Add to groups
+      updated_questions$groups[[group_name]] <- question_id
+    }
+
+    # Update reactives
+    combined_groups <- c(current_groups, new_groups)
+    question_groups(combined_groups)
+    question_titles(updated_questions)
+
+    # Set all new groups to open by default
+    current_states <- details_state_groups()
+    for (group_name in names(new_groups)) {
+      current_states[[paste0("details_", group_name)]] <- TRUE
+    }
+    details_state_groups(current_states)
+
+    # Show success message
+    showModal(modalDialog(
+      title = "Auto-Grouping Complete",
+      paste("Successfully created", length(new_groups), "question groups from Version 1 questions."),
+      easyClose = TRUE,
+      footer = modalButton("OK")
+    ))
+  })
 
 
 

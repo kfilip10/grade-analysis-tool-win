@@ -400,7 +400,7 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
       selection = "multiple", # Enable multiple selection
       filter = "top", # Enable column-based filtering
       options = list(
-        pageLength = 10, autoWidth = TRUE,
+        pageLength = 50, autoWidth = TRUE,
         columnDefs = list(
           list(width = "40px", targets = c(2, 3)) # Adjust specific column width if needed
         )
