@@ -112,6 +112,24 @@ ipcMain.on('kill-server', () => {
   app.quit()
 });
 
+// Add this with your other IPC handlers
+ipcMain.on('restart-app', () => {
+  console.log('Restart requested from renderer');
+  
+  // Kill R process first
+  if (rShinyProcess && !rShinyProcess.killed) {
+    try {
+      rShinyProcess.kill();
+    } catch (e) {
+      console.error('Error killing R process during restart:', e);
+    }
+  }
+  
+  // Restart the app
+  app.relaunch();
+  app.quit();
+});
+
 // IPC handler for toggling R console
 ipcMain.on('toggle-r-console', (event, showConsole) => {
   console.log(`R Console toggle requested: ${showConsole}`);
@@ -233,6 +251,7 @@ const backgroundColor = '#2c3e50'
 // At the random port, another webserver is running
 // at any given time there should be 0 or 1 shiny processes
 let rShinyProcess = null
+
 // Define the file where PIDs will be stored to close R processes that stay open
 
 // tries to start a webserver
@@ -245,6 +264,7 @@ let rShinyProcess = null
 const tryStartWebserver = async (attempt, progressCallback, onErrorStartup,
   onErrorLater, onSuccess) => {
   const { dialog } = await import('electron');
+  await progressCallback({ attempt: attempt, code: 'start' })
 
 
   if (attempt > 3) {
@@ -647,26 +667,47 @@ const createErrorScreen = () => {
 }
 
 
+// Update the progressCallback function around line 620:
 const progressCallback = async (event) => {
   try {
     if (loadingSplashScreen) {
       if (loadingSplashScreen.webContents.isLoading()) {
         loadingSplashScreen.webContents.once('did-finish-load', () => {
           try {
-            if (event.type === 'loading') {
-              loadingSplashScreen.webContents.send('loading-event', event.message);
-            } else if (event.type === 'info') {
+            // Send the right message based on event properties
+            if (event.message) {
+              // If there's a direct message, send it as info
               loadingSplashScreen.webContents.send('info-event', event.message);
+            } else if (event.code === 'start') {
+              loadingSplashScreen.webContents.send('loading-event', `Starting R server (attempt ${event.attempt})...`);
+            } else if (event.code === 'trying') {
+              loadingSplashScreen.webContents.send('loading-event', `Testing connection ${event.i}/15...`);
+            } else if (event.code === 'success') {
+              loadingSplashScreen.webContents.send('loading-event', 'Connection successful! Loading application...');
+            } else if (event.code === 'failed') {
+              loadingSplashScreen.webContents.send('loading-event', 'Failed to start server after multiple attempts.');
+            } else {
+              // Fallback for other events
+              loadingSplashScreen.webContents.send('info-event', JSON.stringify(event));
             }
           } catch (e) {
             console.error('Error sending event after load:', e);
           }
         });
       } else {
-        if (event.type === 'loading') {
-          loadingSplashScreen.webContents.send('loading-event', event.message);
-        } else if (event.type === 'info') {
+        // Same logic for when not loading
+        if (event.message) {
           loadingSplashScreen.webContents.send('info-event', event.message);
+        } else if (event.code === 'start') {
+          loadingSplashScreen.webContents.send('loading-event', `Starting R server (attempt ${event.attempt})...`);
+        } else if (event.code === 'trying') {
+          loadingSplashScreen.webContents.send('loading-event', `Testing connection ${event.i}/15...`);
+        } else if (event.code === 'success') {
+          loadingSplashScreen.webContents.send('loading-event', 'Connection successful! Loading application...');
+        } else if (event.code === 'failed') {
+          loadingSplashScreen.webContents.send('loading-event', 'Failed to start server after multiple attempts.');
+        } else {
+          loadingSplashScreen.webContents.send('info-event', JSON.stringify(event));
         }
       }
     }

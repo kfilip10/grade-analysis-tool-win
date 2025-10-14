@@ -5,19 +5,18 @@
 #create a settings page for editing grade bin data
 createSettingsPage <- function() {
   div(
-    h2("Settings"),
     h3("Canvas API Token"),
     actionButton("editToken", "Edit API Token"),
-    h3("Grade Thresholds"),
+    br(),br(),
     #display grade bin data for dynamic editing
-    #h4("Edit Grade Thresholds"),
+    h3("Edit Grade Thresholds"),
     p("Note: You will need to restart the app for grade changes to take effect."),
     actionButton("editGradeBtn", "Edit Grade Thresholds"),
     actionButton("restoreDefaultGrades", "Restore Default Grade Thresholds"),
+    # Add restart status display
+    uiOutput("restartStatus"),
+    br(),
   )
-  div(
-
-)
 }
 
 readGrades <- function() {
@@ -35,6 +34,10 @@ stop("Cannot find the grades threshold file. Please close and reopen the program
 settings_Handler <- function(input, output, session,canvas_api_token) {
   
   #### Settings #### 
+  # Track if restart is needed
+  restart_needed <- reactiveVal(FALSE)
+  
+  
   
   #### Grade Bins ####
   data <- reactiveVal(readGrades())
@@ -88,13 +91,26 @@ settings_Handler <- function(input, output, session,canvas_api_token) {
     }
     else{
       write.csv(gr.csv,grade_csv_path, row.names = FALSE)
+      restart_needed(TRUE) # Mark that restart is needed
+      
+      
       showModal(modalDialog(
-        title = "File Saved",
-        "Changes have been saved to the file."
+        title = "Grade Thresholds Saved",
+        HTML(paste0(
+          "<p><strong>Changes have been saved successfully!</strong></p>",
+          "<p>The application needs to be restarted for the grade threshold changes to take effect.</p>"
+        )),
+        footer = tagList(
+          actionButton("restartAppGrades", "Restart Application", 
+                       style = "background-color: #dc3545; color: white;"),
+          actionButton("continueWithoutRestart", "Continue Without Restart", 
+                       style = "background-color: #6c757d; color: white;")
+        ),
+        easyClose = FALSE
       ))
     }
-    
   })
+  
   
   #### Edit API Token ####
   # check if canvas_api_token is null
@@ -106,8 +122,7 @@ settings_Handler <- function(input, output, session,canvas_api_token) {
    })
 
   #default reactiveVal is the token loaded by global
-  #if(is.null(canvas_api_token)){canvas_api_token <- ""}else{
-  
+
   saveStatus <- reactiveVal("") # Reactive value to store the save status
   
   observeEvent(input$editToken, {
@@ -138,26 +153,94 @@ settings_Handler <- function(input, output, session,canvas_api_token) {
     ))
   })
   
-  #from GPT, edited to fit this app
   observeEvent(input$saveBtnToken, {
     # Attempt to save the file and update the save status
     tryCatch({
-      saveRDS(input$token, canvas_api_token_path)
-      token(input$token) # Update the token value
-      saveStatus("Token successfully saved. You may attempt to connect.") # Update status on success
+      old_token <- token()
+      new_token <- input$token
+      
+      saveRDS(new_token, canvas_api_token_path)
+      token(new_token) # Update the token value
+      canvas_api_token(readRDS(canvas_api_token_path))
+      
+      # Check if token actually changed
+      if (old_token != new_token) {
+        restart_needed(TRUE) # Mark that restart is needed
+        
+        showModal(modalDialog(
+          title = "API Token Saved",
+          HTML(paste0(
+            "<p><strong>API Token successfully saved!</strong></p>",
+            "<p>The application should be restarted to ensure the new API token is properly loaded.</p>"
+          )),
+          footer = tagList(
+            actionButton("restartAppToken", "Restart Application", 
+                         style = "background-color: #dc3545; color: white;"),
+            actionButton("continueWithoutRestart", "Continue Without Restart", 
+                         style = "background-color: #6c757d; color: white;")
+          ),
+          easyClose = FALSE
+        ))
+      } else {
+        saveStatus("Token saved (no changes detected).")
+      }
+      
     }, error = function(e) {
       saveStatus(paste("Error:", e$message)) # Update status on error
     })
-    canvas_api_token( readRDS(canvas_api_token_path) )
-    
-    # Close the modal dialog after a delay to allow user to read the message
-    #invalidateLater(2000) # 2 seconds delay
-    #removeModal()
   })
   
   output$saveStatus <- renderText({
     saveStatus() # Render the save status text
   })
+  
+  
+  
+  #### Added 14OCT for restarting####
+  observeEvent(input$continueWithoutRestart, {
+    removeModal()
+  })
+  
+  # Restart handlers
+  observeEvent(input$restartAppGrades, {
+    if (exists("restartApp") && is.function(restartApp)) {
+      restartApp()
+    } else {
+      # Fallback using JavaScript if electron API is available
+      session$sendCustomMessage("restartApp", list())
+    }
+  })
+  
+  observeEvent(input$restartAppToken, {
+    if (exists("restartApp") && is.function(restartApp)) {
+      restartApp()
+    } else {
+      # Fallback using JavaScript if electron API is available
+      session$sendCustomMessage("restartApp", list())
+    }
+  })
+  
+  # Add manual restart button to main settings UI
+  output$restartStatus <- renderUI({
+    if (restart_needed()) {
+      div(
+        style = "background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 5px;",
+        HTML("<strong>⚠ Restart Recommended</strong><br>"),
+        p("You have made changes that require an application restart to take full effect."),
+        actionButton("manualRestart", "Restart Application Now", 
+                     style = "background-color: #dc3545; color: white; margin-top: 5px;")
+      )
+    }
+  })
+  
+  observeEvent(input$manualRestart, {
+    if (exists("restartApp") && is.function(restartApp)) {
+      restartApp()
+    } else {
+      session$sendCustomMessage("restartApp", list())
+    }
+  })
+  
 
 }
   

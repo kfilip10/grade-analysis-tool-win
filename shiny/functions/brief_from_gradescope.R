@@ -152,6 +152,7 @@ ppt_init <- function(courseTitle = "PH2XX", eventTitle = "WPRX") {
 
 ppt_prepost <- function(ppt, df_canvas_adj) {
   # Count, mean medium min and max tables
+  #browser()
   ### Pre/post table ----
   pre_stats <- df_canvas_adj %>%
     mutate(
@@ -198,18 +199,24 @@ ppt_prepost <- function(ppt, df_canvas_adj) {
   # show(comp_stats_ft)
 
   ### table grades ----
-
+  grade_levels <- rev(grades.desc)  # reverse to go F → A
+  
   grade_summary <- df_canvas_adj %>%
-    reframe(
-      grade = unique(c(pre_grade, post_grade)), # Combine all unique grades
-      pre_count = sapply(grades.desc, function(g) sum(pre_grade == g)),
-      post_count = sapply(grades.desc, function(g) sum(post_grade == g))
-    ) %>%
     mutate(
-      percent_change = round((post_count - pre_count) / pre_count * 100, 0)
+      pre_grade  = factor(pre_grade,  levels = grade_levels),
+      post_grade = factor(post_grade, levels = grade_levels)
     ) %>%
-    mutate(grade = factor(grade, levels = grades)) %>%
-    arrange(grade)
+    reframe(
+      pre_count  = tabulate(pre_grade,  nbins = length(grade_levels)),
+      post_count = tabulate(post_grade, nbins = length(grade_levels))
+    ) %>%
+    as_tibble() %>%
+    mutate(
+      grade = grade_levels,
+      percent_change = round(100 * (post_count - pre_count) / pmax(pre_count, 1),0)
+    ) %>%
+    select(grade, pre_count, post_count, percent_change)
+  
 
   colnames(grade_summary)[1] <- "Grade"
   colnames(grade_summary)[2] <- "Pre Count"

@@ -176,15 +176,25 @@ ui <- fluidPage(
     
     ### Settings ----
     # Settings page which will write to a folder defined in global.R
+    tabPanel("Settings", icon = icon("cog"), createSettingsPage(), ),
     
-    tabPanel("Settings", icon = icon("cog"), createSettingsPage()),
-    
-    ### FAW ----
+    ### FAQ ----
     
     # FAQ page which is sparse as of 6JAN24
     tabPanel("FAQ", icon = icon("question"), createFAQPage(), )
   ),
   
+  #### JS message handler for restart ####
+  
+  tags$script(HTML("
+  Shiny.addCustomMessageHandler('restartApp', function(message) {
+    if (window.electronAPI && window.electronAPI.restartApp) {
+      window.electronAPI.restartApp();
+    } else {
+      alert('Restart functionality not available. Please manually restart the application.');
+    }
+  });
+"))
 )
  
 # Server ----

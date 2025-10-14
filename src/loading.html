@@ -32,18 +32,19 @@
 
   <script>
 
-    document.getElementById('kill-server-button').addEventListener('click', () => {
-      document.getElementById('loading-update').innerHTML = "This button doesn't actually do anything, well I guess it updates this text. <br>I'd recommend you CTRL ALT DELETE and remove any existing R processes and try again.";
-      window.electron.sendKillServer();
-    });
+      document.getElementById('kill-server-button').addEventListener('click', () => {
+        document.getElementById('loading-update').innerHTML = "Shutting down application...";
+        // Use electronAPI instead of electron
+        window.electronAPI.sendKillServer();
+      });
 
     // Listen for loading events from the main process
-    window.electron.onLoadingEvent((message) => {
+    window.electronAPI.onLoadingEvent((message) => {
       document.getElementById('loading-update').innerHTML = `${message}`;;
     });
 
     // Listen for info events
-    window.electron.onInfoEvent((message) => {
+    window.electronAPI.onInfoEvent((message) => {
       document.getElementById('info-update').innerHTML = `${message}`;
     });
 
