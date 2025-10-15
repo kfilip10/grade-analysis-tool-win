@@ -15,10 +15,69 @@ caption_style <- fp_text(font.size = 20, font.family = "Calibri")
 gs_makebriefmain <- function(question_list, df_canvas_adj, missing_roster, cuts_df,
                              cut_filter_threshold, progress.tot,
                              courseTitle, eventTitle, output_file = "question_groups.pptx") {
+  
+  # === INPUT VALIDATION ===
+  tryCatch({
+    # Check for NULL inputs
+    if (is.null(question_list)) stop("question_list cannot be NULL. Make sure you added questions.")
+    if (is.null(df_canvas_adj)) stop("df_canvas_adj cannot be NULL. Make sure you selected canvas courses.")
+    #if (is.null(missing_roster)) stop("missing_roster cannot be NULL")
+    if (is.null(cuts_df)) stop("cuts_df cannot be NULL. Make sure you uploaded the csv for the cuts.")
+    if (is.null(courseTitle)) stop("courseTitle cannot be NULL. Make sure you entered a course Title.")
+    if (is.null(eventTitle)) stop("eventTitle cannot be NULL. Make sure you entered an event Title.")
+    
+    # Check for empty data
+    if (!is.list(question_list) || length(question_list) == 0) {
+      stop("question_list must be a non-empty list")
+    }
+    if (!is.data.frame(df_canvas_adj) || nrow(df_canvas_adj) == 0) {
+      stop("df_canvas_adj must be a non-empty data frame")
+    }
+    if (!is.data.frame(cuts_df)) {
+      stop("cuts_df must be a data frame")
+    }
+    
+    # Check required columns in df_canvas_adj
+    required_cols_canvas <- c("version", "pre_percent", "post_percent", "mge_percent", 
+                               "pre_grade", "post_grade", "mge_grade")
+    missing_cols <- setdiff(required_cols_canvas, names(df_canvas_adj))
+    if (length(missing_cols) > 0) {
+      stop(paste("df_canvas_adj missing required columns:", paste(missing_cols, collapse = ", ")))
+    }
+    
+    # Check required columns in cuts_df
+    if (!"question" %in% names(cuts_df)) {
+      stop("cuts_df must have a 'question' column")
+    }
+    
+    # Check for NA in critical numeric columns
+    if (any(is.na(df_canvas_adj$version))) {
+      warning("df_canvas_adj contains NA values in 'version' column - these will be filtered out")
+      df_canvas_adj <- df_canvas_adj[!is.na(df_canvas_adj$version), ]
+    }
+    
+    cat("✓ Input validation passed\n")
+    
+  }, error = function(e) {
+    cat("=====================================\n")
+    cat("Input Validation Error in gs_makebriefmain:\n")
+    cat("=====================================\n")
+    cat("Error message:", conditionMessage(e), "\n\n")
+    cat("Full traceback:\n")
+    print(rlang::trace_back())
+    cat("=====================================\n")
+    stop(e)
+  })
+  
   # browser()
   # clean question+list and cut list of underscores
   # remove understores from all the question in cuts_df
   cuts_df$question <- gsub("_", " ", cuts_df$question)
+  
+  # Check if version column has valid data before creating palette
+  if (length(unique(df_canvas_adj$version)) == 0) {
+    stop("df_canvas_adj has no valid version data")
+  }
   version_palette <- setNames(version_palette, unique(df_canvas_adj$version))
 
   # browser()
@@ -59,62 +118,123 @@ gs_makebriefmain <- function(question_list, df_canvas_adj, missing_roster, cuts_
   # question_df <- question_list[[1]]
   # df_name = names(question_list)[1]
 
-
+  cat("Question loop start\n")
   ## 2. Loop through each question group ----
   for (df_name in names(question_list)) {
-    # browser()
-    incProgress(1 / progress.tot, detail = paste0("Making Question slide ", df_name))
+    tryCatch({
+      # browser()
+      cat(paste("Processing question:", df_name, "\n"))
+      incProgress(1 / progress.tot, detail = paste0("Making Question slide ", df_name))
 
-    question_df <- question_list[[df_name]]
+      question_df <- question_list[[df_name]]
+      
+      # Validate question_df
+      if (is.null(question_df) || !is.data.frame(question_df)) {
+        warning(paste("Skipping", df_name, "- not a valid data frame"))
+        next
+      }
+      
+      if (nrow(question_df) == 0) {
+        warning(paste("Skipping", df_name, "- empty data frame"))
+        next
+      }
+      
+      # Check for required columns
+      if (!"label" %in% names(question_df)) {
+        warning(paste("Skipping", df_name, "- missing 'label' column"))
+        next
+      }
+      if (!"value" %in% names(question_df)) {
+        warning(paste("Skipping", df_name, "- missing 'value' column"))
+        next
+      }
 
-    ## DEBUG - loads question groups for testing
-    ## question_df = question_df_list[[1]]
-    ## question_group_name = names(question_df_list)[1]
+      ## DEBUG - loads question groups for testing
+      ## question_df = question_df_list[[1]]
+      ## question_group_name = names(question_df_list)[1]
 
-    # clean of underscores to help matching
-    question_df$label <- gsub("_", " ", question_df$label)
+      # clean of underscores to help matching
+      question_df$label <- gsub("_", " ", question_df$label)
 
-    # extract the version from the question label, it is the last two characters
-    question_df$version <- substr(
-      question_df$label,
-      nchar(question_df$label) - 1,
-      nchar(question_df$label)
-    )
+      # extract the version from the question label, it is the last two characters
+      if (any(nchar(question_df$label) < 2)) {
+        warning(paste("Some labels in", df_name, "are too short to extract version"))
+        question_df$version <- ifelse(nchar(question_df$label) >= 2,
+          substr(question_df$label, nchar(question_df$label) - 1, nchar(question_df$label)),
+          "??"
+        )
+      } else {
+        question_df$version <- substr(
+          question_df$label,
+          nchar(question_df$label) - 1,
+          nchar(question_df$label)
+        )
+      }
 
-    # remove everything outside of the :: and :: from the question label
-    question_df$name <- gsub(".*::(.*)::.*", "\\1", question_df$label)
+      # remove everything outside of the :: and :: from the question label
+      question_df$name <- gsub(".*::(.*)::.*", "\\1", question_df$label)
+      
+      # Check if name extraction worked
+      if (all(question_df$name == question_df$label)) {
+        warning(paste("Question name extraction may have failed for", df_name, "- labels don't contain :: delimiters"))
+      }
 
-    # get the max points
-    question_df$max <- as.numeric(ifelse(
-      grepl(
-        "\\(\\d+(\\.\\d+)? (pts|points)\\)",
-        question_df$name
-      ), # Match rows with numeric values
-      sub(
-        ".*\\((\\d+(\\.\\d+)?) (pts|points)\\).*", "\\1",
-        question_df$name
-      ), # Extract numbers
-      NA # Assign NA when no match
-    ))
+      # get the max points
+      question_df$max <- as.numeric(ifelse(
+        grepl(
+          "\\(\\d+(\\.\\d+)? (pts|points)\\)",
+          question_df$name
+        ), # Match rows with numeric values
+        sub(
+          ".*\\((\\d+(\\.\\d+)?) (pts|points)\\).*", "\\1",
+          question_df$name
+        ), # Extract numbers
+        NA # Assign NA when no match
+      ))
 
-    if (any(is.na(question_df$max))) {
-      stop("Could not extract max points from question label.
-         Check that your question titles don't contain parentheses in Gradescope and try again.")
-    }
-    # get the percentage
-    question_df$percent <- question_df$value / question_df$max
+      if (any(is.na(question_df$max))) {
+        stop(paste("Could not extract max points from question label in", df_name,
+           ".\nCheck that your question titles don't contain parentheses in Gradescope and try again.",
+           "\nFirst few labels:", paste(head(question_df$name, 3), collapse = ", ")))
+      }
+      
+      # Check for zero or negative max points
+      if (any(question_df$max <= 0, na.rm = TRUE)) {
+        stop(paste("Invalid max points (≤0) found in", df_name))
+      }
+      
+      # get the percentage - protect against division by zero
+      question_df$percent <- ifelse(question_df$max > 0,
+        question_df$value / question_df$max,
+        0
+      )
 
-    # get the grades
-    question_df$grade <- sapply(question_df$percent, letter_grade, breaks, grades)
+      # get the grades
+      if (!exists("letter_grade") || !exists("breaks") || !exists("grades")) {
+        stop("Required variables 'letter_grade', 'breaks', or 'grades' not found in environment")
+      }
+      question_df$grade <- sapply(question_df$percent, letter_grade, breaks, grades)
 
-    # format the percentage
-    question_df$percent <- question_df$percent * 100
+      # format the percentage
+      question_df$percent <- question_df$percent * 100
 
-    # get the question group name
-    question_group_name <- df_name
-    question_df <- question_df %>% arrange(version)
+      # get the question group name
+      question_group_name <- df_name
+      question_df <- question_df %>% arrange(version)
 
-    ppt <- gen_question_slide(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold)
+      ppt <- gen_question_slide(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold)
+      
+    }, error = function(e) {
+      cat("=====================================\n")
+      cat(paste("Error processing question group:", df_name, "\n"))
+      cat("=====================================\n")
+      cat("Error message:", conditionMessage(e), "\n")
+      cat("Error call:", deparse(conditionCall(e)), "\n\n")
+      cat("Full traceback:\n")
+      print(rlang::trace_back())
+      cat("=====================================\n")
+      stop(e)  # Re-throw to halt execution
+    })
   }
   return(ppt)
   ## Save the PowerPoint file ----
@@ -130,6 +250,35 @@ gs_makebriefmain <- function(question_list, df_canvas_adj, missing_roster, cuts_
 
 ## 1A. PPT Initialize ----
 ppt_init <- function(courseTitle = "PH2XX", eventTitle = "WPRX") {
+  tryCatch({
+    # Validate inputs
+    if (is.null(courseTitle) || courseTitle == "") {
+      warning("courseTitle is empty - using default")
+      courseTitle <- "PH2XX"
+    }
+    if (is.null(eventTitle) || eventTitle == "") {
+      warning("eventTitle is empty - using default")
+      eventTitle <- "WPRX"
+    }
+    
+    # Check if wd exists
+    if (!exists("wd")) {
+      stop("'wd' (working directory) variable not found in environment")
+    }
+    
+    # Check if template file exists
+    template_path <- str_c(wd, "/www/template_gs.pptx")
+    if (!file.exists(template_path)) {
+      stop(paste("Template file not found at:", template_path))
+    }
+    
+  }, error = function(e) {
+    cat("Error in ppt_init:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   #### Load PPT based on input data####
   ppt <- read_pptx(str_c(wd, "/www/template_gs.pptx"))
 
@@ -151,6 +300,34 @@ ppt_init <- function(courseTitle = "PH2XX", eventTitle = "WPRX") {
 ## 1B. PRE Post Function ----
 
 ppt_prepost <- function(ppt, df_canvas_adj) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(df_canvas_adj) || !is.data.frame(df_canvas_adj) || nrow(df_canvas_adj) == 0) {
+      stop("df_canvas_adj must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    required_cols <- c("pre_percent", "post_percent", "mge_percent", "pre_grade", "post_grade")
+    missing_cols <- setdiff(required_cols, names(df_canvas_adj))
+    if (length(missing_cols) > 0) {
+      stop(paste("ppt_prepost: df_canvas_adj missing columns:", paste(missing_cols, collapse = ", ")))
+    }
+    
+    # Check for all NA columns
+    if (all(is.na(df_canvas_adj$pre_percent))) {
+      stop("pre_percent column contains only NA values")
+    }
+    if (all(is.na(df_canvas_adj$post_percent))) {
+      stop("post_percent column contains only NA values")
+    }
+    
+  }, error = function(e) {
+    cat("Error in ppt_prepost:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   # Count, mean medium min and max tables
   #browser()
   ### Pre/post table ----
@@ -163,10 +340,10 @@ ppt_prepost <- function(ppt, df_canvas_adj) {
     summarise(
       Type = "Pre",
       Number = n(),
-      Average = mean(pre_percent),
-      Median = median(pre_percent),
-      Min = min(pre_percent),
-      Max = max(pre_percent)
+      Average = mean(pre_percent, na.rm = TRUE),
+      Median = median(pre_percent, na.rm = TRUE),
+      Min = min(pre_percent, na.rm = TRUE),
+      Max = max(pre_percent, na.rm = TRUE)
     )
 
   post_stats <- df_canvas_adj %>%
@@ -177,10 +354,10 @@ ppt_prepost <- function(ppt, df_canvas_adj) {
     summarise(
       Type = "Post",
       Number = n(),
-      Average = mean(post_percent),
-      Median = median(post_percent),
-      Min = min(post_percent),
-      Max = max(post_percent)
+      Average = mean(post_percent, na.rm = TRUE),
+      Median = median(post_percent, na.rm = TRUE),
+      Min = min(post_percent, na.rm = TRUE),
+      Max = max(post_percent, na.rm = TRUE)
     )
 
   comp.stats <- rbind(pre_stats, post_stats)
@@ -201,6 +378,11 @@ ppt_prepost <- function(ppt, df_canvas_adj) {
   ### table grades ----
   grade_levels <- rev(grades.desc)  # reverse to go F → A
   
+  # Validate grades exist in data
+  if (!all(c("pre_grade", "post_grade") %in% names(df_canvas_adj))) {
+    stop("df_canvas_adj missing pre_grade or post_grade columns")
+  }
+  
   grade_summary <- df_canvas_adj %>%
     mutate(
       pre_grade  = factor(pre_grade,  levels = grade_levels),
@@ -213,7 +395,7 @@ ppt_prepost <- function(ppt, df_canvas_adj) {
     as_tibble() %>%
     mutate(
       grade = grade_levels,
-      percent_change = round(100 * (post_count - pre_count) / pmax(pre_count, 1),0)
+      percent_change = round(100 * (post_count - pre_count) / pmax(pre_count, 1), 0)
     ) %>%
     select(grade, pre_count, post_count, percent_change)
   
@@ -376,6 +558,35 @@ ppt_prepost <- function(ppt, df_canvas_adj) {
 
 ## 1C. Pre Score Distribution by Version ----
 ppt_prescorepop <- function(ppt, df_canvas_adj) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(df_canvas_adj) || !is.data.frame(df_canvas_adj) || nrow(df_canvas_adj) == 0) {
+      stop("df_canvas_adj must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    if (!"version" %in% names(df_canvas_adj)) {
+      stop("df_canvas_adj missing 'version' column")
+    }
+    if (!"pre_percent" %in% names(df_canvas_adj)) {
+      stop("df_canvas_adj missing 'pre_percent' column")
+    }
+    if (!"pre_grade" %in% names(df_canvas_adj)) {
+      stop("df_canvas_adj missing 'pre_grade' column")
+    }
+    
+    # Check if version_palette exists
+    if (!exists("version_palette")) {
+      stop("version_palette not found in environment")
+    }
+    
+  }, error = function(e) {
+    cat("Error in ppt_prescorepop:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   P <- ggplot(df_canvas_adj, aes(x = pre_percent, fill = version)) +
     geom_density(alpha = 0.2) +
     theme_bw() +
@@ -388,11 +599,11 @@ ppt_prescorepop <- function(ppt, df_canvas_adj) {
     group_by(version) %>%
     summarise(
       "Count" = n(),
-      "Mean (%)" = round(mean(pre_percent), 1),
-      "Median (%)" = round(median(pre_percent), 1),
-      "Std. Dev (%)" = round(sd(pre_percent), 1),
-      "# D/F's" = sum(pre_grade == "D" | pre_grade == "F"),
-      "# A's" = sum(pre_grade == "A" | pre_grade == "A+" | pre_grade == "A-")
+      "Mean (%)" = round(mean(pre_percent, na.rm = TRUE), 1),
+      "Median (%)" = round(median(pre_percent, na.rm = TRUE), 1),
+      "Std. Dev (%)" = round(sd(pre_percent, na.rm = TRUE), 1),
+      "# D/F's" = sum(pre_grade == "D" | pre_grade == "F", na.rm = TRUE),
+      "# A's" = sum(pre_grade == "A" | pre_grade == "A+" | pre_grade == "A-", na.rm = TRUE)
     )
 
   df.vers.sum <- df.vers.sum %>%
@@ -449,7 +660,42 @@ ppt_prescorepop <- function(ppt, df_canvas_adj) {
 
 ## 1D. Makeup Cadets  ----
 ppt_makeupcadets <- function(ppt, missing_roster) {
-  missing_roster <- missing_roster %>% select(user.sortable_name, instructor, section_hour)
+  tryCatch({
+    # Validate inputs
+    if (is.null(missing_roster) || !is.data.frame(missing_roster)) {
+      warning("missing_roster is NULL or not a data frame - skipping makeup cadets slide")
+      return(ppt)
+    }
+    
+    if (nrow(missing_roster) == 0) {
+      cat("No makeup cadets to display\n")
+      return(ppt)
+    }
+    
+    # Check required columns exist
+    required_cols <- c("user.sortable_name", "instructor", "section_hour")
+    missing_cols <- setdiff(required_cols, names(missing_roster))
+    if (length(missing_cols) > 0) {
+      warning(paste("missing_roster missing columns:", paste(missing_cols, collapse = ", ")))
+      # Try to work with available columns
+      available_cols <- intersect(required_cols, names(missing_roster))
+      if (length(available_cols) == 0) {
+        warning("No valid columns found in missing_roster - skipping slide")
+        return(ppt)
+      }
+      missing_roster <- missing_roster[, available_cols, drop = FALSE]
+    } else {
+      missing_roster <- missing_roster %>% select(user.sortable_name, instructor, section_hour)
+    }
+    
+  }, error = function(e) {
+    cat("Error in ppt_makeupcadets:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    warning("Skipping makeup cadets slide due to error")
+    return(ppt)
+  })
+  
   missing_roster <- missing_roster %>% rename(
     "Cadet Name" = user.sortable_name,
     "Instructor" = instructor,
@@ -479,16 +725,37 @@ ppt_makeupcadets <- function(ppt, missing_roster) {
 
 ## 1e. Version comparison ----
 ppt_versioncomp <- function(ppt, df_canvas_adj, eventTitle) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(df_canvas_adj) || !is.data.frame(df_canvas_adj) || nrow(df_canvas_adj) == 0) {
+      stop("df_canvas_adj must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    required_cols <- c("version", "mge_percent", "mge_grade")
+    missing_cols <- setdiff(required_cols, names(df_canvas_adj))
+    if (length(missing_cols) > 0) {
+      stop(paste("ppt_versioncomp: missing columns:", paste(missing_cols, collapse = ", ")))
+    }
+    
+  }, error = function(e) {
+    cat("Error in ppt_versioncomp:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   df.vers.sum <- df_canvas_adj %>%
     group_by(version) %>%
     summarise(
-      "Count" = n(), "Mean (%)" = round(mean(mge_percent), 1),
-      "Median (%)" = round(median(mge_percent), 1),
-      "Std. Dev (%)" = round(sd(mge_percent), 1),
-      "Min (%)" = round(min(mge_percent), 1),
-      "Max (%)" = round(max(mge_percent), 1),
-      "# D/F's" = sum(mge_grade == "D" | mge_grade == "F"),
-      "# A's" = sum(mge_grade == "A" | mge_grade == "A+" | mge_grade == "A-")
+      "Count" = n(), 
+      "Mean (%)" = round(mean(mge_percent, na.rm = TRUE), 1),
+      "Median (%)" = round(median(mge_percent, na.rm = TRUE), 1),
+      "Std. Dev (%)" = round(sd(mge_percent, na.rm = TRUE), 1),
+      "Min (%)" = round(min(mge_percent, na.rm = TRUE), 1),
+      "Max (%)" = round(max(mge_percent, na.rm = TRUE), 1),
+      "# D/F's" = sum(mge_grade == "D" | mge_grade == "F", na.rm = TRUE),
+      "# A's" = sum(mge_grade == "A" | mge_grade == "A+" | mge_grade == "A-", na.rm = TRUE)
     )
   df.vers.sum <- df.vers.sum %>% mutate(
     "# D/F's" = str_c(
@@ -514,6 +781,7 @@ ppt_versioncomp <- function(ppt, df_canvas_adj, eventTitle) {
 
   version.unique <- unique(df_canvas_adj$version)
   df_canvas_adj$version <- factor(df_canvas_adj$version, rev(version.unique))
+  
   #### :Box and Whisker ####
   v.comp <- ggplot(df_canvas_adj, aes(x = version, y = mge_percent, fill = version)) +
     geom_hline(yintercept = 60, linetype = "dashed", linewidth = 1, color = "red") +
@@ -548,17 +816,38 @@ ppt_versioncomp <- function(ppt, df_canvas_adj, eventTitle) {
 
 ## 1f. Version Summaries ----
 ppt_versionstats <- function(ppt, df_canvas_adj) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(df_canvas_adj) || !is.data.frame(df_canvas_adj) || nrow(df_canvas_adj) == 0) {
+      stop("df_canvas_adj must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    required_cols <- c("version", "mge_percent", "mge_grade")
+    missing_cols <- setdiff(required_cols, names(df_canvas_adj))
+    if (length(missing_cols) > 0) {
+      stop(paste("ppt_versionstats: missing columns:", paste(missing_cols, collapse = ", ")))
+    }
+    
+  }, error = function(e) {
+    cat("Error in ppt_versionstats:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   # df_version <- df_canvas_adj %>% filter(version==unique(df_canvas_adj$version)[1])
   df.vers.sum <- df_canvas_adj %>%
     group_by(version) %>%
     summarise(
-      "Count" = n(), "Mean (%)" = round(mean(mge_percent), 1),
-      "Median (%)" = round(median(mge_percent), 1),
-      "Std. Dev (%)" = round(sd(mge_percent), 1),
-      "Min (%)" = round(min(mge_percent), 1),
-      "Max (%)" = round(max(mge_percent), 1),
-      "# D/F's" = sum(mge_grade == "D" | mge_grade == "F"),
-      "# A's" = sum(mge_grade == "A" | mge_grade == "A+" | mge_grade == "A-")
+      "Count" = n(), 
+      "Mean (%)" = round(mean(mge_percent, na.rm = TRUE), 1),
+      "Median (%)" = round(median(mge_percent, na.rm = TRUE), 1),
+      "Std. Dev (%)" = round(sd(mge_percent, na.rm = TRUE), 1),
+      "Min (%)" = round(min(mge_percent, na.rm = TRUE), 1),
+      "Max (%)" = round(max(mge_percent, na.rm = TRUE), 1),
+      "# D/F's" = sum(mge_grade == "D" | mge_grade == "F", na.rm = TRUE),
+      "# A's" = sum(mge_grade == "A" | mge_grade == "A+" | mge_grade == "A-", na.rm = TRUE)
     )
   df.vers.sum <- df.vers.sum %>% mutate(
     "# D/F's" = str_c(
@@ -646,7 +935,41 @@ ppt_versionstats <- function(ppt, df_canvas_adj) {
 # question_group_name = names(question_list)[1]
 
 gen_question_slide <- function(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold) {
-  # browser()
+  tryCatch({
+    # browser()
+    
+    # Validate inputs
+    if (is.null(question_df) || !is.data.frame(question_df) || nrow(question_df) == 0) {
+      stop("question_df must be a non-empty data frame")
+    }
+    
+    # Check required columns exist
+    required_cols <- c("version", "name", "value", "percent", "grade", "max")
+    missing_cols <- setdiff(required_cols, names(question_df))
+    if (length(missing_cols) > 0) {
+      stop(paste("question_df missing required columns:", paste(missing_cols, collapse = ", ")))
+    }
+    
+    # Check for NA values in critical columns
+    if (all(is.na(question_df$value))) {
+      stop("All values in 'value' column are NA")
+    }
+    if (all(is.na(question_df$percent))) {
+      stop("All values in 'percent' column are NA")
+    }
+    
+  }, error = function(e) {
+    cat("=====================================\n")
+    cat("Error in gen_question_slide:\n")
+    cat("Question group:", question_group_name, "\n")
+    cat("=====================================\n")
+    cat("Error message:", conditionMessage(e), "\n\n")
+    cat("Full traceback:\n")
+    print(rlang::trace_back())
+    cat("=====================================\n")
+    stop(e)
+  })
+  
   # Make the slide
   ppt <- add_slide(ppt, layout = "question", master = "Office Theme")
   ppt <- ph_with(ppt,
@@ -740,7 +1063,40 @@ gen_question_slide <- function(ppt, question_df, question_group_name, cuts_df, c
 # q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version_palette[i],bin.width)
 # df = question_df
 plot_question <- function(df, max_pts) {
-  # browser()
+  tryCatch({
+    # browser()
+    
+    # Validate inputs
+    if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+      stop("df must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    if (!"label" %in% names(df)) {
+      stop("df missing 'label' column")
+    }
+    if (!"value" %in% names(df)) {
+      stop("df missing 'value' column")
+    }
+    if (!"percent" %in% names(df)) {
+      stop("df missing 'percent' column")
+    }
+    if (!"max" %in% names(df)) {
+      stop("df missing 'max' column")
+    }
+    
+    # Check for all NA in critical columns
+    if (all(is.na(df$value))) {
+      stop("All values in 'value' column are NA")
+    }
+    
+  }, error = function(e) {
+    cat("Error in plot_question:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   # here I want to check the length of the df legend
   # if I exceed the length of the version_palette then I want to set version_palette to a longer color palette
 
@@ -861,6 +1217,32 @@ plot_question <- function(df, max_pts) {
 # df <- question_df
 ## 2B. Grade Counts table----
 question_grades_table <- function(df) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+      stop("df must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    if (!"version" %in% names(df)) {
+      stop("df missing 'version' column")
+    }
+    if (!"grade" %in% names(df)) {
+      stop("df missing 'grade' column")
+    }
+    
+    # Check if grades variable exists
+    if (!exists("grades")) {
+      stop("'grades' variable not found in environment")
+    }
+    
+  }, error = function(e) {
+    cat("Error in question_grades_table:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   # Summarize grades by version
   grades_sum <- df %>%
     group_by(version, grade) %>%
@@ -899,14 +1281,34 @@ question_grades_table <- function(df) {
 ## 2C. Make Summary Table ----
 
 summary_table_question <- function(df) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+      stop("df must be a non-empty data frame")
+    }
+    
+    # Check required columns
+    required_cols <- c("version", "percent", "grade")
+    missing_cols <- setdiff(required_cols, names(df))
+    if (length(missing_cols) > 0) {
+      stop(paste("df missing required columns:", paste(missing_cols, collapse = ", ")))
+    }
+    
+  }, error = function(e) {
+    cat("Error in summary_table_question:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+  
   df.q.t.sum <- df %>%
     group_by(version) %>%
     summarise(
       "Count" = n(),
-      "Mean" = round(mean(percent), 1),
-      "SD" = round(sd(percent), 1),
-      "# D/F's" = sum(grade == "D" | grade == "F"),
-      "# A's" = sum(grade == "A" | grade == "A+" | grade == "A-")
+      "Mean" = round(mean(percent, na.rm = TRUE), 1),
+      "SD" = round(sd(percent, na.rm = TRUE), 1),
+      "# D/F's" = sum(grade == "D" | grade == "F", na.rm = TRUE),
+      "# A's" = sum(grade == "A" | grade == "A+" | grade == "A-", na.rm = TRUE)
     )
   df.q.t.sum <- df.q.t.sum %>%
     mutate(
@@ -930,6 +1332,44 @@ summary_table_question <- function(df) {
 
 ## 2D. Cut Table ----
 cuts_table <- function(question_df, cuts_df, cut_filter_threshold) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(question_df) || !is.data.frame(question_df) || nrow(question_df) == 0) {
+      warning("question_df is NULL, empty, or not a data frame - returning empty cuts table")
+      return(flextable(data.frame(Message = "No cuts data available")))
+    }
+    
+    if (is.null(cuts_df) || !is.data.frame(cuts_df) || nrow(cuts_df) == 0) {
+      warning("cuts_df is NULL, empty, or not a data frame - returning empty cuts table")
+      return(flextable(data.frame(Message = "No cuts data available")))
+    }
+    
+    # Check required columns in question_df
+    if (!"name" %in% names(question_df)) {
+      stop("question_df missing 'name' column")
+    }
+    
+    # Check required columns in cuts_df
+    required_cols <- c("version", "number", "question", "cut_percent_true")
+    missing_cols <- setdiff(required_cols, names(cuts_df))
+    if (length(missing_cols) > 0) {
+      warning(paste("cuts_df missing columns:", paste(missing_cols, collapse = ", ")))
+      return(flextable(data.frame(Message = "Cuts data missing required columns")))
+    }
+    
+    # Validate cut_filter_threshold
+    if (is.null(cut_filter_threshold) || !is.numeric(cut_filter_threshold)) {
+      warning("Invalid cut_filter_threshold - using default 0.15")
+      cut_filter_threshold <- 0.15
+    }
+    
+  }, error = function(e) {
+    cat("Error in cuts_table:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    return(flextable(data.frame(Message = "Error generating cuts table")))
+  })
+  
   q_names <- unique(question_df$name)
   # browser()
   cuts_df <- cuts_df %>% mutate(key = paste0("V", version, "-", number, ": ", question))
@@ -945,10 +1385,23 @@ cuts_table <- function(question_df, cuts_df, cut_filter_threshold) {
     cuts_df_filtered <- cuts_df %>%
       filter(sapply(key, function(q) any(agrepl(q, q_names, max.distance = 0.2))))
   }
-  # filter out the cuts that are less than 15 percent
-  #
+  
+  # If still no matches, return empty table with message
+  if (nrow(cuts_df_filtered) == 0) {
+    cat("No matching cuts found for this question\n")
+    return(flextable(data.frame(Message = "No cuts applied for this question")))
+  }
+  
+  # filter out the cuts that are less than threshold percent
   cuts_df_filtered <- cuts_df_filtered %>%
     filter(cut_percent_true > cut_filter_threshold)
+  
+  # If no cuts pass threshold, return message
+  if (nrow(cuts_df_filtered) == 0) {
+    cat("No cuts above threshold for this question\n")
+    return(flextable(data.frame(Message = paste0("No cuts above ", cut_filter_threshold*100, "% threshold"))))
+  }
+  
   # now I want to make a flextable of the cuts, but I want to sort them by version then by cut_percent_true
   #
   cuts_df_filtered <- cuts_df_filtered %>%
