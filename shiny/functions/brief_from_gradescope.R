@@ -15,7 +15,7 @@ caption_style <- fp_text(font.size = 20, font.family = "Calibri")
 gs_makebriefmain <- function(question_list, df_canvas_adj, missing_roster, cuts_df,
                              cut_filter_threshold, progress.tot,
                              courseTitle, eventTitle, output_file = "question_groups.pptx") {
-  
+  #browser()
   # === INPUT VALIDATION ===
   tryCatch({
     # Check for NULL inputs

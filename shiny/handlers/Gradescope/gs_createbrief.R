@@ -71,17 +71,23 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
   
   observe({    
     req(gs_data$canvas_roster, gs_data$gs_roster)
-    df_canvas_roster <- gs_data$canvas_roster
+    #browser()
     
-    df_gs <- gs_data$gs_roster 
+    df_canvas_roster <- gs_data$canvas_roster %>% mutate(email=(tolower(email)))
     
+    #if error lowering email then report to check there is email in gradescope data
+    df_gs <- gs_data$gs_roster %>%
+      dplyr::rename(email = !!names(.)[tolower(names(.)) == "email"]) %>%
+      dplyr::mutate(email = tolower(email))
+    
+    df_missing <- tolower(gs_data$missing_roster$email)
     # remove the missing roster from the df_canvas
-    df_canvas_roster <- df_canvas_roster[!df_canvas_roster$sis_user_id %in% gs_data$missing_roster$sis_user_id,]
+    df_canvas_roster <- df_canvas_roster[!df_canvas_roster$email %in% df_missing,]
     
     
     
     #combine df_canvas with df_gs
-    df_canvas_adj <- full_join(df_canvas_roster, df_gs, by ="sis_user_id")
+    df_canvas_adj <- full_join(df_canvas_roster, df_gs %>% select(-sis_user_id), by ="email")
     
     #remove incomplete rows (i.e. if they selected fewer entries)
     df_canvas_adj <- df_canvas_adj %>% filter(!is.na(user_id))
@@ -191,7 +197,7 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
           if(length(missing_cols) > 0) {
             stop(paste0("Missing required columns: ", paste(missing_cols, collapse = ", "), ". Please check your Gradescope data."))
           }
-          
+          #browser()
           df_canvas_adj <- df_canvas_adj %>% 
             mutate(post_points = pre_points+`Total Score`,
                   post_max = current_max+`Max Points`,
@@ -199,13 +205,17 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
                   mge_percent = `Total Score`/`Max Points`)%>%
             rename(pre_grade = grade)
           
+          #saveRDS(df_canvas_adj, "df.rds") #debugging 14NOV
+          
           df_canvas_adj$mge_grade <- sapply(
             df_canvas_adj$mge_percent,letter_grade,breaks,grades)
+          
           df_canvas_adj$post_grade <- sapply(
             df_canvas_adj$post_percent,letter_grade,breaks,grades)
           
           df_canvas_adj$post_percent <- df_canvas_adj$post_percent*100
           df_canvas_adj$mge_percent <- df_canvas_adj$mge_percent*100
+          #browser()
           
           # Validate gs_data components exist
           if(is.null(gs_data$gs_question_groups) || length(gs_data$gs_question_groups) == 0) {
@@ -229,7 +239,6 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
           if(!exists("gs_makebriefmain")) {
             stop("Brief generation function 'gs_makebriefmain' not found. Please check if all required functions are loaded.")
           }
-
           gs_data$ppt <- gs_makebriefmain(
             question_df_list,
             df_canvas_adj,
