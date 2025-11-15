@@ -76,12 +76,13 @@ gs_createbrief_server <- function(input, output, session,gs_data,gs_wizard_statu
     df_gs <- gs_data$gs_roster 
     
     # remove the missing roster from the df_canvas
-    df_canvas_roster <- df_canvas_roster[!df_canvas_roster$sis_user_id %in% gs_data$missing_roster$sis_user_id,]
+    df_canvas_roster <- df_canvas_roster[!df_canvas_roster$email %in% gs_data$missing_roster$email,]
     
     
     
     #combine df_canvas with df_gs
-    df_canvas_adj <- full_join(df_canvas_roster, df_gs, by ="sis_user_id")
+    #emails should be joined now based on standardized function call and storage earlier
+    df_canvas_adj <- full_join(df_canvas_roster, df_gs, by ="email")
     
     #remove incomplete rows (i.e. if they selected fewer entries)
     df_canvas_adj <- df_canvas_adj %>% filter(!is.na(user_id))

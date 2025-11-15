@@ -91,7 +91,18 @@ ui <- fluidPage(
       }
   ")),
   ),
-  
+
+    # Conditional debug button - only shows in development
+  conditionalPanel(
+    condition = "typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')",
+    div(
+      actionButton("debug_button", "Debug", 
+                   class = "debug-button",
+                   title = "Click to trigger browser() for debugging"),
+      style = "position: relative;"
+    )
+  ),
+
   # navbarPage - creates a navbar at the top of the page
   navbarPage(
     id = "navbarID",
@@ -108,24 +119,11 @@ ui <- fluidPage(
 
     # icons from:https://www.w3schools.com/bootstrap/bootstrap_ref_comp_glyphs.asp
     ),
-    ### Gradescope Page----
-    tabPanel("Brief from Gradescope",
-             value = "gradescope_panel",
-             icon = icon("fire", lib = "glyphicon"),
-             tabsetPanel(
-               id = "gradescope_tabs", # Add an id here
-               tabPanel("Preparation",value = "gs_prep",gs_prep_ui()),
-               tabPanel("Input Scores",value = "gs_scores", gs_scores_ui()),
-               tabPanel("Access Canvas",value = "gs_canvas", withSpinner(gs_canvas_ui())),
-               tabPanel("Input Cut Data",value = "gs_cuts", gs_cuts_ui()),
-               tabPanel("Make the Brief",value = "gs_createbrief", gs_createbrief_ui()),
-               tabPanel("Upload Scores to Canvas",value = "gs_uploadgrades", gs_updategrades_ui())
-             )
-    ),
+
     
     
     ### Canvas Data Page----
-    tabPanel("Canvas Access",
+    tabPanel("Canvas Gradebook",
              value = "canvas_panel",
              icon = icon("cloud", lib = "glyphicon"),
              tabsetPanel(
@@ -140,13 +138,26 @@ ui <- fluidPage(
                ),
              )
     ),
-    
+    ### Gradescope Page----
+    tabPanel("Gradescope Brief",
+             value = "gradescope_panel",
+             icon = icon("fire", lib = "glyphicon"),
+             tabsetPanel(
+               id = "gradescope_tabs", # Add an id here
+               tabPanel("Preparation",value = "gs_prep",gs_prep_ui()),
+               tabPanel("Input Scores",value = "gs_scores", gs_scores_ui()),
+               tabPanel("Access Canvas",value = "gs_canvas", withSpinner(gs_canvas_ui())),
+               tabPanel("Input Cut Data",value = "gs_cuts", gs_cuts_ui()),
+               tabPanel("Make the Brief",value = "gs_createbrief", gs_createbrief_ui()),
+               tabPanel("Upload Scores to Canvas",value = "gs_uploadgrades", gs_updategrades_ui())
+             )
+    ),
     ### WPR Brief Page ----
     # Makes the pre-WPR data prep page.
     # Makes the WPR Analysis and Brief page.
     # This page within the navbar has multiple tabs
     
-    tabPanel("WPR Analysis and Brief",
+    tabPanel("Manual Brief",
              icon = icon("stats", lib = "glyphicon"),
              tabsetPanel(
                tabPanel("Upload Data", createBriefUploadPage()),
@@ -199,6 +210,12 @@ ui <- fluidPage(
  
 # Server ----
 server <- function(input, output, session) {
+    # Debug button handler - only active in development
+  observeEvent(input$debug_button, {
+    cat("Debug button clicked - entering browser mode\n")
+    browser()  # This will pause execution and open the debugger
+  })
+  
   output$connectivityStatus <- renderText({
     if (check_internet_access()) {
       # Internet access is available

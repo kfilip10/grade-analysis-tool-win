@@ -77,29 +77,129 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
   })
 
 
-
-
-
+  
+  # Add a reactive trigger for the refresh button
+  gs_refresh_trigger <- reactiveVal(0)
+  
+  # observe actionbutton to load the section data
   observeEvent(input$gs_refreshsectiondata, {
-    if (!is.null(gs_connectionstatus()) && gs_connectionstatus() == "Success") {
-      gs_load_courses(gs_connectionstatus())
-    } else {
-      NULL
-    }
+    gs_load_section_start()
+    
+    gs_refresh_trigger(gs_refresh_trigger() + 1) # Increment to trigger reactive
   })
-
-
+  
+  gs_load_section_start <- function() {
+    # course_list_df has the courses
+    # includes: sections - dataframe of sections in each course
+    # total students: total number of students in each course
+    # open a box that says 'Loading course data, please wait' that also has a with progress
+    # Open a modal dialog before loading data
+    showModal(modalDialog(
+      title = "Loading",
+      "Loading course data, please wait...",
+      footer = NULL,
+      easyClose = FALSE
+    ))
+    withProgress(message = "Loading course data, please wait...", value = 0, {
+      course_list_df <- get_course_list(include = c("sections", "total_students", "term"))
+      
+      # browser()
+      sections <- lapply(course_list_df$id, function(x) {
+        incProgress(1 / length(unique(course_list_df$id)),
+                    detail = paste("Loading course data for course", x)
+        )
+        get_section_info(x, include = "total_students")
+      })
+      
+      
+      # end_time <- Sys.time()
+      # end_time - start_time
+      sections.comb <- bind_rows(sections)
+      
+      # filter no student courses and non-USMA courses
+      sections.comb <- sections.comb %>% filter(!total_students == 0, !is.na(sis_section_id))
+      # browser()
+      ## Creating dataframe of sections##
+      #' name' - section name
+      #' total_students' - total number of students enrolled in the section
+      #' section_id' section id from get_section_info 'id'
+      # rename id in sections to section_id
+      names(sections.comb)[names(sections.comb) == "id"] <- "section_id"
+      #' #'id' course id - from id
+      names(sections.comb)[names(sections.comb) == "course_id"] <- "id"
+      
+      #' course' course name extracted from name
+      sections.comb <- sections.comb %>% mutate(course = str_extract(sis_section_id, "[A-Z]{2}[0-9]{3}"))
+      
+      #' # 'term' - from course_list_df term.name
+      # Extract the term from course_list_df term.name by matching id
+      sections.comb <- sections.comb %>% left_join(course_list_df %>% select(id, term.name), by = "id")
+      names(sections.comb)[names(sections.comb) == "term.name"] <- "term"
+      
+      hours <- sections.comb$name %>% str_extract("\\b[A-Z0-9]{4}\\b\\s+\\d+")
+      section <- str_extract(hours, "\\d+\\s*$")
+      hours <- str_extract(hours, "\\b[A-Z0-9]{4}\\b")
+      # If section is 'NA' then label as 'NA'
+      # 'section_hour' - extracted hour from section name 'A1B1'
+      # 'section' - section number from section name '3' or '4'
+      sections.comb <- sections.comb %>% mutate(section_hour = hours, section = section)
+      sections.comb <- sections.comb %>% mutate(instr_name = str_extract(name, "(?<=-)[^-]+$"))
+      # returns sections.comb
+      #' name' - section name
+      #' id' course id - from id
+      #' course' course name extracted from name
+      #' total_students' - total number of students enrolled in the section
+      #' section_id' section id from get_section_info 'id'
+      #' # 'term' - from course_list_df term.name
+      # 'section_hour' - extracted hour from section name 'A1B1'
+      # 'section' - section number from section name '3' or '4'
+      # 'instr_name' - name of instructor from section name
+    })
+    removeModal()
+    # save sections.comb to section_defaults_path defined in global.r
+    saveRDS(sections.comb, SECTION_DEFAULTS_PATH)
+    return(sections.comb)
+  }
+  
   ## Canvas Courses
   ##   #reactive value for the course list only if the connection is successful
   gs_courselist <- reactive({
-    if (!is.null(gs_connectionstatus()) &&
-      gs_connectionstatus() == "Success" &&
-      gs_wizard_status$gs_scores_completed == TRUE) {
-      gs_load_courses(gs_connectionstatus())
-    } else {
-      NULL
+    # Add dependency on refresh trigger
+    gs_refresh_trigger()
+    
+    if (input$navbarID == "gradescope_panel") {  # Update this to match your navbar panel ID
+      if (!is.null(gs_connectionstatus()) &&
+          gs_connectionstatus() == "Success" &&
+          gs_wizard_status$gs_scores_completed == TRUE) {
+        
+        # Check if there is a file at SECTION_DEFAULTS_PATH
+        if (file.exists(SECTION_DEFAULTS_PATH)) {
+          # Check the date the file was written
+          file_date <- file.info(SECTION_DEFAULTS_PATH)$mtime
+          file_date <- as.Date(file_date)
+          
+          # If it is older than 10 days then ask if they want to reload the data
+          if (Sys.Date() - file_date > 10) {
+            cat("File is older than 10 days, reloading section data\n")
+            return(gs_load_section_start())
+          } else {
+            # If it is within 10 days then load the data from file
+            cat("Loading section data from recent file\n")
+            return(readRDS(SECTION_DEFAULTS_PATH))
+          }
+        } else {
+          # If there isn't a file then get the section list data
+          cat("No section defaults file found, loading fresh data\n")
+          return(gs_load_section_start())
+        }
+      } else {
+        return(NULL)
+      }
     }
+    return(NULL) # Return NULL if not in the gs_canvas panel or connection failed
   })
+
+
 
   #### Course Selection ####
   gs_selectedcourses <- reactiveVal(data.frame())
@@ -145,7 +245,7 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
   gs_errorlist <- reactiveVal()
 
   observeEvent(input$gs_loadgrades, {
-    # Check if courses are selected
+    # Check 1 if courses are selected
     if (is.null(gs_selectedcourses()) || nrow(gs_selectedcourses()) == 0) {
       showModal(modalDialog(
         title = HTML("<span style='color: orange;'>⚠ No Courses Selected</span>"),
@@ -158,6 +258,23 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
       ))
       return() # Stop execution here
     }
+    
+    # Check 2: Gradescope roster data exists
+    if (is.null(gs_data$gs_roster) || nrow(gs_data$gs_roster) == 0) {
+      showModal(modalDialog(
+        title = HTML("<span style='color: red;'>⚠ No Gradescope Data Found</span>"),
+        HTML(paste0(
+          "<p><strong>You must upload and process Gradescope score files first.</strong></p>",
+          "<p>Please go back to the 'Upload Scores' tab and complete the Gradescope data upload before loading Canvas roster data.</p>",
+          "<p>The Canvas roster is used to match against your Gradescope data, so Gradescope data must be loaded first.</p>"
+        )),
+        easyClose = TRUE,
+        footer = modalButton("Close")
+      ))
+      return() # Stop execution here
+    }
+    
+    
     
     # Existing code continues here...
     if (!is.null(gs_selectedcourses())) {
@@ -174,6 +291,10 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
       # saveRDS(canvas_roster, "test/canvas_roster.rds")
 
       canvas_roster <- get_student_roster(gs_selectedcourses(), gs_errorlist(), INSTRUCTOR_SEARCH_KEY)
+      
+      canvas_roster <- standardize_email_column(canvas_roster)
+      
+      #set all emails to lower case
 
       gs_canvasroster(canvas_roster)
 
@@ -189,20 +310,16 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
       # Check if SID exists in gs_roster
       # make gs_roster all lower case column names
 
-      gs_roster <- gs_roster %>% rename_all(tolower)
-
-      if ("sid" %in% colnames(gs_roster)) {
-        # Compare using SID
-        df_missing <- canvas_roster %>%
-          anti_join(gs_roster, by = c("sis_user_id" = "sid"))
-      } else if ("email" %in% colnames(gs_roster)) {
+      #gs_roster <- gs_roster %>% rename_all(tolower)
+      #browser()
+      if ("email" %in% colnames(gs_roster)) {
         # Fallback to comparison by email
         df_missing <- canvas_roster %>%
           anti_join(gs_roster, by = "email")
       } else {
         showModal(modalDialog(
           title = "Error: Missing Columns",
-          "The Gradescope Roster does not contain the cadet ID (labelled 'SID') or an email column (labelled 'email' or 'Email'). Please check that your gradescope roster has an SID or email column to check for matches to Canvas. This error does not stop you from proceeding.",
+          "The Gradescope Roster does not contain the email column (labelled 'email' or 'Email'). Please check that your gradescope roster has an email column to check for matches to Canvas. This error does not stop you from proceeding but may cause data loss.",
           easyClose = TRUE,
           footer = modalButton("Close")
         ))

@@ -23,6 +23,8 @@ gs_prep_ui <- function(){
        h4("Click the button to proceed."),
        actionButton("gs_prep_next",label = HTML("Confirm and Proceed <span class='arrow-icon'>&rarr;</span>"), 
                     class = "custom-button"),
+       br(),
+       br()
        
        
      )

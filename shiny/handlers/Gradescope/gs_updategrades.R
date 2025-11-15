@@ -178,10 +178,7 @@ gs_updategrades_server <- function(input, output, session,gs_data,gs_wizard_stat
       grades_df <- df2 %>% select(user_id,gs_data$score_column,course_id,id) %>%
         rename(assignment_id=id,
                points = gs_data$score_column)
-      #TODO: Logic to post grades
-      #logic to upload to canvas
-      # define based on template reactive
-      #add a modal to ask to verify they checked for duplicates, if they say yes then proceed, if no then exit the function
+
       
       
       resp <- lapply(split(grades_df, grades_df$course_id), grade_assignments_bulk)

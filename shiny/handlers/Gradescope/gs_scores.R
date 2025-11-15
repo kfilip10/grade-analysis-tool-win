@@ -7,20 +7,43 @@
 gs_scores_ui <- function() {
   tagList(
     tags$style(HTML("
-      .remove-button {
-        background-color: #ff6666;
-        border: none;
-        color: white;
-        font-size: 10px;       /* Smaller font */
-        font-weight: bold;
-        cursor: pointer;
-        padding: 1px 6px;      /* Smaller padding */
-        border-radius: 4px;
-      }
-      .remove-button:hover {
-        background-color: #cc0000;
-      }
-    ")),
+  .remove-button {
+    background-color: #ff6666;
+    border: none;
+    color: white;
+    font-size: 8px;        /* Even smaller for compact layout */
+    font-weight: bold;
+    cursor: pointer;
+    padding: 1px 4px;      /* Very small padding */
+    border-radius: 2px;
+    line-height: 1;
+  }
+  .remove-button:hover {
+    background-color: #cc0000;
+  }
+  
+  /* Compact draggable items */
+  .draggable {
+    transition: background-color 0.2s ease;
+  }
+  .draggable:hover {
+    background-color: #f0f8ff !important;
+    border-color: #007bff !important;
+  }
+  
+  /* Scrollbar styling for better UX */
+  .compact-question-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .compact-question-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+  .compact-question-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+  }
+")),
     tags$div(
       id = "floating_group_panel",
       style = "
@@ -90,13 +113,14 @@ gs_scores_ui <- function() {
     ## Main Section: Question Groups and Uploaded Files ---------------------
     div(
       style = "margin-top: 0.5in;",
+      h3("2. Create Question Groups"),
+      
       tabsetPanel(
         tabPanel(
           "Create Question Groups",
           fluidRow(
             column(
               width = 12,
-              h4("Create Question Groups"),
               p("Drag and drop questions to create groups for analysis."),
               p("After adding a group rename it by clicking the group name and typing in the question concept being analyzed."),
             )
@@ -264,10 +288,52 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
   # score column from user selection
   score_column <- reactiveVal()
   max_column <- reactiveVal()
-
+  # Top-level observers for column selection (move these OUTSIDE of other observeEvent blocks)
+  score_col_observer <- NULL
+  max_col_observer <- NULL
+  upload_session_id <- reactiveVal(NULL)
+  
+  
+  ## Reset Reactives function ----
+  reset_score_data <- function() {
+    upload_session_id(paste0("session_", Sys.time(), "_", runif(1)))
+    
+    # Destroy existing observers
+    if (!is.null(score_col_observer)) {
+      score_col_observer$destroy()
+      score_col_observer <- NULL
+    }
+    if (!is.null(max_col_observer)) {
+      max_col_observer$destroy() 
+      max_col_observer <- NULL
+    }
+    
+    # Clear reactive values
+    gs_score_files(list())
+    question_titles(list(pool = list(), groups = list()))
+    question_groups(list())
+    gs_roster(NULL)
+    score_column(NULL)
+    max_column(NULL)
+    admin_matches(NULL)
+    details_state_groups(list())
+    
+    # Reset file version tracking
+    file_versions$files <- NULL
+    file_versions$versions <- list()
+    
+    # Clear any existing modals
+    removeModal()
+    
+    # Show notification
+    showNotification("Previous data cleared. Ready for new upload.", type = "message")
+  }
+  
   ## Input Excel File ----
   observeEvent(input$gs_score_files, {
-    # browser()
+    #clear reactives 
+    reset_score_data()
+    
     req(input$gs_score_files)
     file_paths <- input$gs_score_files$datapath
     file_names <- input$gs_score_files$name
@@ -336,105 +402,83 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
 
 
   observeEvent(input$confirm_excel_version, {
-    # Get the current file index needing version selection
     current_index <- length(file_versions$versions) + 1
-
     file_name <- file_versions$files[current_index]
-
     df <- read_excel(input$gs_score_files$datapath[current_index])
-
     df <- df %>% mutate(version = input$selected_version)
-    # browser()
-    # browser()
-    # a <- question_titles()
-    # names(question_titles()$pool[1])
-    # ## ADDED 16MAY ----
-    # # Goal is to make the first batch of question groups based on v1 input
-    # # Since subsequent versions will have similar this just saves button pressing.
-    # # Automatically create groups for the first file's questions
-    # if(current_index==1){
-    #   first_file <- names(question_titles()$pool[1])
-    #   first_questions <- question_titles()$pool[[first_file]]
-    #   version_label <- paste0("v", input$selected_version)
-    #
-    #   # Initialize new groups list
-    #   auto_groups <- list()
-    #   grouped_questions <- list()
-    #
-    #   for (q in first_questions) {
-    #     group_id=q
-    #     group_id <- gsub("(?<=\\d)\\.0\\b", "", group_id, perl = TRUE)
-    #     group_id <- gsub("[^[:alnum:] ]+", "", group_id )     # Keep alnum + space
-    #     group_id <- gsub(" +", " ", group_id)                    # Collapse whitespace
-    #     group_id <- trimws(group_id)
-    #     full_id <- paste(first_file, q, version_label, sep = "::")
-    #     auto_groups[[group_id]] <- full_id
-    #     grouped_questions[[group_id]] <- c(full_id)
-    #   }
-    #
-    #   # Update question_titles() with these groups
-    #   existing <- question_titles()
-    #   existing$groups <- auto_groups
-    #   # Remove the added questions from the pool
-    #   existing$pool[[first_file]] <- setdiff(existing$pool[[first_file]], first_questions)
-    #   question_titles(existing)
-    #
-    #   # Update the named list of empty groups
-    #   group_names <- setNames(vector("list", length(auto_groups)), names(auto_groups))
-    #   question_groups(group_names)
-    #
-    #   # Open all by default in details_state_groups
-    #   state <- lapply(names(auto_groups), function(nm) paste0("details_", nm))
-    #   details_state_groups(setNames(as.list(rep(TRUE, length(state))), state))
-    # }
-    # #### END ADDED 16MAY ----
-    # I want to select the columnnames that match the admin_matches
+    
     matches <- as.character(admin_matches())
-
     valid_matches <- intersect(matches, colnames(df))
-
     df2 <- df %>% select(all_of(valid_matches), version)
-
-    # if the score column is not selected, then have the user select it
-
+    
     if (current_index == 1) {
-      ### Identify Score Column ----
-
       col_options <- colnames(df2)
-
+      
+      # Store df2 so the top-level observers can access it
+      session$userData$current_df <- df2
+      session$userData$current_index <- current_index
+      
       showModal(modalDialog(
         title = "Select the 'Total Score' or 'Score' Column",
-        selectInput("score_col", "Select the column header which contains the score of the individual. This is likely called 'Total Score'. DO NOT SELECT the MAX points column.", choices = col_options),
+        selectInput("score_col", "Select the column header which contains the score of the individual...", choices = col_options),
         actionButton("confirm_score_col", "Confirm Selection"),
         footer = NULL,
         easyClose = FALSE
       ))
-
-      observeEvent(input$confirm_score_col, {
-        score_column(input$score_col)
-        removeModal()
-
-        ### Identify Max Column ----
-
-        showModal(modalDialog(
-          title = "Select the 'Max Points'  Column",
-          selectInput("max_col", "Select the column header which contains the maximum points for the exam.", choices = col_options),
-          actionButton("confirm_max_col", "Confirm Selection"),
-          footer = NULL,
-          easyClose = FALSE
-        ))
-
-        observeEvent(input$confirm_max_col, {
-          max_column(input$max_col)
-          removeModal()
-          process_with_score_col(df2, current_index)
-        })
-      })
+      
+      # REMOVE the nested observeEvent blocks - they're now at the top level
+      
     } else {
       process_with_score_col(df2, current_index)
     }
   })
-
+  
+  get_current_df <- function(index) {
+    return(session$userData$current_df)
+  }
+  # TOP-LEVEL observers (not nested inside other observers)
+  observeEvent(input$confirm_score_col, {
+    # Validate this is the current upload session
+    if (is.null(upload_session_id()) || is.null(input$gs_score_files)) {
+      removeModal()
+      return()
+    }
+    
+    score_column(input$score_col)
+    removeModal()
+    
+    # Get current file being processed
+    current_index <- length(file_versions$versions) + 1
+    col_options <- colnames(get_current_df(current_index))  # You'll need to make this accessible
+    
+    showModal(modalDialog(
+      title = "Select the 'Max Points' Column",
+      selectInput("max_col", "Select the column header which contains the maximum points for the exam.", choices = col_options),
+      actionButton("confirm_max_col", "Confirm Selection"),
+      footer = NULL,
+      easyClose = FALSE
+    ))
+  }, ignoreInit = TRUE)
+  
+  
+  observeEvent(input$confirm_max_col, {
+    # Validate this is the current upload session
+    if (is.null(upload_session_id()) || is.null(input$gs_score_files)) {
+      removeModal()
+      return()
+    }
+    
+    max_column(input$max_col)
+    removeModal()
+    
+    # Get current file being processed and continue
+    current_index <- length(file_versions$versions) + 1
+    df2 <- get_current_df(current_index)  # You'll need to make this accessible
+    process_with_score_col(df2, current_index)
+  }, ignoreInit = TRUE)
+  
+  
+  
   process_with_score_col <- function(df, current_index) {
     file_name <- file_versions$files[current_index]
     # remove NA entries in the score column
@@ -693,19 +737,29 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
   })
 
   observeEvent(input$add_group, {
-    # Show a modal to name the new group
-    showModal(modalDialog(
-      title = "Name the Question Grouping",
-      textInput(
-        inputId = "new_group_name",
-        label = "Enter a unique name for the question grouping, this can be changed later.",
-        value = ""
-      ),
-      footer = tagList(
-        modalButton("Cancel"),
-        actionButton("confirm_new_group", "Add Group")
-      )
-    ))
+    # Generate a default unique name
+    current_groups <- question_groups()
+    base_name <- "Question Group"
+    counter <- 1
+    
+    # Find next available number
+    while (paste(base_name, counter) %in% names(current_groups)) {
+      counter <- counter + 1
+    }
+    
+    new_group_name <- paste(base_name, counter)
+    
+    # Add the new group immediately
+    current_groups[[new_group_name]] <- character(0)
+    question_groups(current_groups)
+    
+    # Preserve existing states and add the new group (open by default)
+    current_states <- details_state_groups()
+    current_states[[paste0("details_", new_group_name)]] <- TRUE
+    details_state_groups(current_states)
+    
+    # Optional: Show a brief notification
+    showNotification(paste("Added:", new_group_name), type = "message", duration = 2)
   })
 
   observeEvent(input$confirm_new_group, {
@@ -773,18 +827,18 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     open_states <- details_state_groups() # Retrieve stored states
     num_groups <- length(names(question_groups())) # Number of groups
     column_width <- max(12 %/% num_groups, 3) # Calculate column width (minimum width of 3)
-
+    
     tags$div(
-      style = "display: flex; flex-direction: column; gap: 6px;",
+      style = "display: flex; flex-direction: column; gap: 16px;",
       # for each question group
       lapply(names(question_groups()), function(group) {
         tags$div(
           id = paste0("details_", group),
           style = "border: 1px solid #333; padding: 8px; background-color: #ccc4ad; border-radius: 6px;",
-
+          
           # FLEX container for input + delete button
           tags$div(
-            style = "display: flex; align-items: center; gap: 6px; margin-bottom: 6px;",
+            style = "display: flex; align-items: center; gap: 6px; margin-bottom: 3px;",
             div(
               style = "flex-grow: 1;",
               textInput(
@@ -804,79 +858,135 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
             id = group,
             ondrop = paste0("drop(event, '", group, "')"),
             ondragover = "allowDrop(event)",
-            style = "padding: 3px; margin: 3px 0; background-color: #eef2f7; border: 3px solid #ccc; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 6px;",
-            lapply(current_questions$groups[[group]], function(header_info) {
-              header_parts <- strsplit(header_info, "::")[[1]]
-              file_name <- header_parts[1]
-              header <- header_parts[2]
-              version <- header_parts[3]
+            # UPDATED STYLE - Compact table-like layout
+            style = "padding: 8px; margin: 3px 0; background-color: #eef2f7; border: 2px dashed #999; border-radius: 4px; min-height: 50px;",
+            # Add placeholder text for empty groups
+            if (length(current_questions$groups[[group]]) == 0) {
               tags$div(
-                id = header_info,
-                class = "draggable",
-                draggable = "true",
-                ondragstart = "drag(event)",
-                style = "padding: 6px; margin: 4px; background: #fff; border: 1px solid #ddd; border-radius: 4px; min-width: 120px; max-width: 200px; flex-grow: 1;",
-                div(
-                  style = "width: 90%; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
-                  paste(header, version)
-                ), # 16MAY
-                tags$button(
-                  class = "remove-button",
-                  onclick = paste0("Shiny.onInputChange('remove_question', {header: '", header_info, "'})"),
-                  "X"
-                )
+                style = "color: #666; font-style: italic; text-align: center; padding: 15px; font-size: 12px;",
+                "Drop questions here"
               )
-            })
+            },
+            # COMPACT question list - table-like rows
+            tags$div(
+              style = "display: flex; flex-direction: column; gap: 2px;",
+              lapply(current_questions$groups[[group]], function(header_info) {
+                header_parts <- strsplit(header_info, "::")[[1]]
+                file_name <- header_parts[1]
+                header <- header_parts[2]
+                version <- header_parts[3]
+                tags$div(
+                  id = header_info,
+                  class = "draggable",
+                  draggable = "true",
+                  ondragstart = "drag(event)",
+                  # COMPACT STYLING - table row like
+                  style = "display: flex; align-items: center; justify-content: space-between; padding: 3px 6px; margin: 1px 0; background: #fff; border: 1px solid #ddd; border-radius: 3px; font-size: 11px; line-height: 1.2; min-height: 24px; cursor: move;",
+                  # Question text (left side)
+                  tags$div(
+                    style = "flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px;",
+                    paste(header, version)
+                  ),
+                  # Remove button (right side)
+                  tags$button(
+                    class = "remove-button",
+                    onclick = paste0("Shiny.onInputChange('remove_question', {header: '", header_info, "'})"),
+                    style = "font-size: 8px; padding: 1px 4px; margin-left: 4px; flex-shrink: 0;",
+                    "×"
+                  )
+                )
+              })
+            )
           )
         )
       })
     )
   })
 
-
+  #observe key strokes to update group names
+  
   observe({
     req(question_groups()) # Ensure groups exist
-    current_groups <- question_groups()
-    current_questions <- question_titles()
-
-    for (group in names(current_groups)) {
-      input_id <- paste0("edit_group_name_", group)
-
-      observeEvent(input[[input_id]],
-        {
-          req(input[[input_id]]) # Ensure the input is not NULL
-
-          updated_groups <- question_groups()
-          updated_questions <- question_titles()
-          new_name <- input[[input_id]]
-
-          # Validate the new group name
-          if (new_name != "" && !(new_name %in% names(updated_groups))) {
-            # Transfer the questions to the new group name
-            updated_questions$groups[[new_name]] <- updated_questions$groups[[group]]
-            updated_questions$groups[[group]] <- NULL # Remove the old group name
-
-            # Update the group names
-            names(updated_groups)[names(updated_groups) == group] <- new_name
-
-            # Save updates
-            question_groups(updated_groups)
-            question_titles(updated_questions)
-          } else if (new_name == "") {
-            showModal(modalDialog(
-              title = "Invalid Group Name",
-              "Group name cannot be empty. Please provide a valid name.",
-              easyClose = TRUE,
-              footer = modalButton("OK")
-            ))
-          }
-        },
-        ignoreInit = TRUE,
-        ignoreNULL = TRUE
-      )
+    
+    # Get all current group names
+    current_group_names <- names(question_groups())
+    
+    # Create observers for each group if they don't already exist
+    for (group in current_group_names) {
+      local({
+        current_group <- group  # Capture the current group name in local scope
+        input_id <- paste0("edit_group_name_", current_group)
+        
+        # Only create observer if it doesn't exist for this group
+        if (!exists(paste0("observer_", gsub("[^[:alnum:]]", "_", current_group)), envir = .GlobalEnv)) {
+          
+          # Debounced reactive for this input
+          debounced_input <- debounce(reactive(input[[input_id]]), 3000)  # 3 second delay
+          
+          # Create observer that watches the debounced input
+          assign(paste0("observer_", gsub("[^[:alnum:]]", "_", current_group)), 
+                 observeEvent(debounced_input(), {
+                   req(debounced_input()) # Ensure the input is not NULL
+                   
+                   updated_groups <- question_groups()
+                   updated_questions <- question_titles()
+                   new_name <- debounced_input()
+                   
+                   # Clean the new name
+                   new_name <- gsub("[^[:alnum:]]", " ", new_name)
+                   new_name <- gsub("\\s+", " ", new_name)
+                   new_name <- trimws(new_name)
+                   
+                   # Validate the new group name
+                   if (new_name != "" && new_name != current_group && !(new_name %in% names(updated_groups))) {
+                     # Transfer the questions to the new group name
+                     updated_questions$groups[[new_name]] <- updated_questions$groups[[current_group]]
+                     updated_questions$groups[[current_group]] <- NULL # Remove the old group name
+                     
+                     # Update the group names
+                     names(updated_groups)[names(updated_groups) == current_group] <- new_name
+                     
+                     # Update states
+                     current_states <- details_state_groups()
+                     current_states[[paste0("details_", new_name)]] <- current_states[[paste0("details_", current_group)]]
+                     current_states[[paste0("details_", current_group)]] <- NULL
+                     details_state_groups(current_states)
+                     
+                     # Save updates
+                     question_groups(updated_groups)
+                     question_titles(updated_questions)
+                     
+                     # Remove the old observer reference
+                     if (exists(paste0("observer_", gsub("[^[:alnum:]]", "_", current_group)), envir = .GlobalEnv)) {
+                       rm(list = paste0("observer_", gsub("[^[:alnum:]]", "_", current_group)), envir = .GlobalEnv)
+                     }
+                     
+                     # Show success notification
+                     showNotification(paste("Group renamed to:", new_name), type = "message", duration = 2)
+                     
+                   } else if (new_name == "") {
+                     showModal(modalDialog(
+                       title = "Invalid Group Name",
+                       "Group name cannot be empty. Please provide a valid name.",
+                       easyClose = TRUE,
+                       footer = modalButton("OK")
+                     ))
+                   } else if (new_name %in% names(updated_groups) && new_name != current_group) {
+                     showModal(modalDialog(
+                       title = "Duplicate Group Name", 
+                       "A group with this name already exists. Please choose a unique name.",
+                       easyClose = TRUE,
+                       footer = modalButton("OK")
+                     ))
+                   }
+                 }, ignoreInit = TRUE, ignoreNULL = TRUE),
+                 envir = .GlobalEnv)
+        }
+      })
     }
   })
-
+  
+  
   ## Remove Question Group ----
   observeEvent(input$trigger_delete_group, {
     group_name <- input$trigger_delete_group
@@ -1142,8 +1252,24 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     question_list <- question_list[!sapply(question_list, is.null)]
 
     gs_data$gs_question_groups <- question_list
-
-    gs_data$gs_roster <- gs_roster() %>% rename(sis_user_id = SID)
+    
+    gs_roster_df <- gs_roster()
+    
+    
+    gs_roster_df <- standardize_email_column(gs_roster_df)
+    
+    #Here I want to first check if the SID column is present in the gs_roster before renaming
+    # 14NOV I removed this to track by email since GS DOES require an email.
+    # There is likely an edge case where a student has a mismatched email, but very unlikely
+    # if(!"SID" %in% colnames(gs_roster_df)) {
+    #     cat("No 'SID' column in gs_roster()\n")
+    #     gs_data$gs_roster <- gs_roster_df
+    # }
+    # else{
+    #   # remove SID column
+    #   gs_data$gs_roster <- gs_roster_df %>% select(-SID)
+    # }
+    gs_data$gs_roster <- gs_roster_df
     gs_data$versions_selected <- file_versions$versions
     gs_data$score_column <- score_column()
     gs_data$max_column <- max_column()

@@ -153,3 +153,59 @@ letter_grade <- function(score, breaks, grades) {
   
   
 })(file.path(getwd(),"req.txt"), silent = F)#This line calls the function with those arguments
+
+
+
+
+# Function to find and standardize email column
+find_email_column <- function(df) {
+  col_names <- colnames(df)
+  
+  # Look for exact matches first
+  email_patterns <- c("email", "Email", "EMAIL", "e-mail", "E-mail", "E-Mail")
+  
+  # Check for exact matches
+  exact_match <- intersect(col_names, email_patterns)
+  if (length(exact_match) > 0) {
+    return(exact_match[1])  # Return first exact match
+  }
+  
+  # Check for partial matches (case insensitive)
+  email_col <- grep("email", col_names, ignore.case = TRUE, value = TRUE)
+  if (length(email_col) > 0) {
+    return(email_col[1])  # Return first partial match
+  }
+  
+  # Check for other common email column names
+  other_patterns <- c("mail", "address", "contact")
+  for (pattern in other_patterns) {
+    match_col <- grep(pattern, col_names, ignore.case = TRUE, value = TRUE)
+    if (length(match_col) > 0) {
+      return(match_col[1])
+    }
+  }
+  
+  # If no match found, return NULL
+  return(NULL)
+}
+
+# Function to standardize email column name in a dataframe to 'email' as the name
+# also makes all emails lower case
+standardize_email_column <- function(df) {
+  email_col <- find_email_column(df)
+  
+  if (is.null(email_col)) {
+    warning("No email column found in the dataframe")
+    return(df)
+  }
+  
+  if (email_col != "email") {
+    # Rename the column to "email"
+    colnames(df)[colnames(df) == email_col] <- "email"
+    message(paste("Column", email_col, "renamed to 'email'"))
+  }
+  
+  df$email <- tolower(df$email)
+  
+  return(df)
+}

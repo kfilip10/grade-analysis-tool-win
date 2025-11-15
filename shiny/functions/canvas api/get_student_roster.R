@@ -54,7 +54,7 @@ get_student_roster <- function(course_df, error_list, instructor.search.key = "i
   st_comb <- st_comb %>% select(
     course_id,
     user_id,
-    sis_user_id, # C number
+    sis_user_id, # CID number
     course_section_id,
     user.sortable_name,
     email,
