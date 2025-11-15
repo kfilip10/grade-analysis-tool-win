@@ -484,7 +484,7 @@ gs_scores_server <- function(input, output, session, gs_data, gs_wizard_status) 
     # remove NA entries in the score column
 
     df_NA_filtered <- df %>% filter(!is.na(!!sym(score_column())))
-
+    
     # sym(score_col): Converts the column name (as a string) into a symbol that dplyr can interpret as a column reference.
     # !!: Unquotes the symbol, allowing it to be evaluated as a column name within filter().
 

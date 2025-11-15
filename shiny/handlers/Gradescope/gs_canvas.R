@@ -301,7 +301,9 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
       # DEBUG - reads gradescope data from file for testing
       # saveRDS(gs_roster, "test/gs_roster.rds")
       # gs_roster <- readRDS("test/gs_roster.rds")
-
+      
+      #browser() #DEBUGGING 14NOV
+      
       gs_roster <- gs_data$gs_roster
 
 
@@ -316,15 +318,25 @@ gs_canvas_server <- function(input, output, session, gs_data, gs_wizard_status, 
         # Fallback to comparison by email
         df_missing <- canvas_roster %>%
           anti_join(gs_roster, by = "email")
+        
+        matching_method <- "Email (no SID column found)"
+        
       } else {
+        # No SID or email columns
         showModal(modalDialog(
           title = "Error: Missing Columns",
           "The Gradescope Roster does not contain the email column (labelled 'email' or 'Email'). Please check that your gradescope roster has an email column to check for matches to Canvas. This error does not stop you from proceeding but may cause data loss.",
           easyClose = TRUE,
           footer = modalButton("Close")
         ))
-        # return() # Stop further execution
+        df_missing <- canvas_roster # Assume all missing
+        matching_method <- "Error"
       }
+      
+      # Show user which matching method was used
+      cat("Matching method used:", matching_method, "\n")
+      cat("Students matched:", nrow(canvas_roster) - nrow(df_missing), "\n")
+      cat("Students missing from Gradescope:", nrow(df_missing), "\n")
 
       if (nrow(df_missing) > 0) {
         gs_cadetsmissing(df_missing)
