@@ -1,51 +1,284 @@
-# 1 PANE Grade Brief Tool 
-`
-[[Course director  and lab director page]]
-[[Data Viz Report for WPRs]]
+# Grade Analysis Tool (Windows)
 
-Electron: [[yarn]]
-- Debugging in browser()
-saveRDS(df,file ="env/uploaded template graded.rds")
+A desktop application that automates grade distribution analysis for courses and exams. It wraps an **R Shiny** web application inside an **Electron** shell so end users get a native `.exe` installer with no need to install R separately. The app interfaces with **Canvas LMS** and **Gradescope** APIs to pull gradebook data, compute statistics, and generate PowerPoint briefing slides.
 
-## Building - Dev Note
-- Add github token
+---
 
-- yarn start
-	- check it works
-- Edit version to a new version
-	- package.json
-- yarn build
-- yarn dist
-	- this should publish to github
-- Set release to current / out of draft
+## Table of Contents
 
+- [Overview](#overview)
+- [Architecture](#architecture)
+  - [Startup Sequence](#startup-sequence)
+  - [Electron Layer (`src/`)](#electron-layer-src)
+  - [R Shiny Layer (`shiny/`)](#r-shiny-layer-shiny)
+  - [Bundled R Runtime (`r-win/`)](#bundled-r-runtime-r-win)
+- [Shiny App Structure](#shiny-app-structure)
+- [Build and Release](#build-and-release)
+- [R Library Packaging and Update Checklist](#r-library-packaging-and-update-checklist)
+- [Troubleshooting Guide](#troubleshooting-guide)
+- [Installation and Usage](#installation-and-usage)
 
+---
 
-# 2 Overview
+## Overview
 
-This R Shiny application serves as a powerful tool for analyzing and visualizing exam grade data. It takes in raw exam scores grouped by question points, performs analysis, and generates a comprehensive PowerPoint presentation summarizing the results.
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Desktop shell | Electron 28 | Window management, auto-updates, process lifecycle |
+| Backend server | R 4.3.2 + Shiny | Data processing, Canvas/Gradescope API calls, report generation |
+| Packaging | electron-builder + NSIS | Produces a one-click Windows installer |
+| Auto-update | electron-updater | GitHub Releases-based OTA updates |
 
-## 2.1 Features
+The user launches the `.exe`. Electron spawns a local R process that starts a Shiny server on a random port. Once the server responds, Electron loads that URL in a `BrowserWindow`. All R packages are pre-bundled in `r-win/library/` so there is no install step for the user.
 
-- **Data Input**: Allows the user to upload exam grade data in Excel format.
-- **Analysis**: Performs statistical analysis and visualization of the exam grade distributions.
-- **Presentation Generation**: Generates a PowerPoint presentation containing summary charts, graphs, and insights.
+---
 
-## 2.2 Installation
-1. Download the .exe setup file from the following link
-2. Install on your local machine
-3. Run the program, on first startup it will download the required packages for R Studio from CRAN (an active internet connection is required).
+## Architecture
 
-## 2.3 Usage
+```
+┌──────────────────────────────────────────────────────┐
+│                   Electron (main.js)                 │
+│  - Spawns R child process                            │
+│  - Shows loading splash screen                       │
+│  - Checks for auto-updates (GitHub Releases)         │
+│  - Manages PID file for cleanup on crash/relaunch    │
+│  - IPC: kill-server, restart-app, toggle-r-console   │
+├──────────────────┬───────────────────────────────────┤
+│  Loading Screen  │  BrowserWindow → http://127.0.0.1:PORT │
+│  (loading.html)  │  (renders Shiny UI)               │
+└──────────────────┴──────────┬────────────────────────┘
+                              │ HTTP (localhost)
+                   ┌──────────▼──────────┐
+                   │   R Shiny Server    │
+                   │   (start-shiny.R)   │
+                   │                     │
+                   │  shiny/app.R        │
+                   │  shiny/global.R     │
+                   │  shiny/handlers/    │
+                   │  shiny/functions/   │
+                   └─────────────────────┘
+```
 
-1. **Upload Data**: 
-2. **Data Analysis**: Explore various visualizations and statistical summaries available based on the uploaded data.
-3. **Generate Presentation**: Once satisfied with the analysis, click on the "Generate Presentation" button to create a PowerPoint file.
-5. **Download**: Download the generated PowerPoint file for distribution within the Physics department.
+### Startup Sequence
 
-## 2.4 WPR Workflow
+1. **Electron `app.on('ready')`** &mdash; kills any orphaned R processes from a previous bad shutdown (reads PIDs from `rPIDs.txt` in `userData`).
+2. **Auto-update check** &mdash; `electron-updater` checks GitHub Releases. If an update is found it downloads, quits, and installs before proceeding.
+3. **`tryStartWebserver()`** &mdash; picks a random available port (3000–8000), spawns `r-win/bin/R --vanilla -f start-shiny.R` with environment variables pointing to the bundled library and the `shiny/` directory.
+4. **Polling loop** &mdash; sends `HEAD` requests to `http://127.0.0.1:<port>` up to 15 times over ~30 seconds. On success the loading splash is replaced with the main `BrowserWindow` loading the Shiny URL.
+5. **Timeout** &mdash; if the server hasn't responded in 90 seconds a dialog offers to restart or close.
 
-### 2.4.1 Excel template
+### Electron Layer (`src/`)
+
+| File | Role |
+|------|------|
+| `main.js` | Application entry point. Spawns R, manages windows, IPC handlers, auto-updater, menu, PID tracking. |
+| `index.js` | ESM re-export of `main.js`. |
+| `preload.js` | Context bridge exposing `electronAPI` to renderer (kill-server, restart, toggle R console, loading events). |
+| `helpers.js` | `randomPort()`, `waitFor()`, `getRPath()` — utility functions for R process management. |
+| `loading.html / loading.css` | Splash screen shown while R boots. Displays connection attempt progress. |
+| `failed.html` | Error screen shown if R fails to start. |
+| `update.html / loading_download.html` | UI for auto-update download progress. |
+
+Key IPC channels:
+- `kill-server` — renderer asks main to quit the app.
+- `restart-app` — kills R, relaunches Electron.
+- `toggle-r-console` — restarts R with/without a visible console window (debug menu).
+
+### R Shiny Layer (`shiny/`)
+
+| File / Folder | Role |
+|---------------|------|
+| `app.R` | Top-level Shiny UI + server definition. Loads all handlers and functions via `sourceAllFilesInFolder()`. |
+| `global.R` | Shared state: grade thresholds, settings paths, package loading from `req.txt`, global helper functions. |
+| `req.txt` | Plain-text list of CRAN package names the app depends on. |
+| `handlers/` | Shiny module files — each contains both UI and server logic for a tab (Home, Canvas, Gradescope, Settings, FAQ, etc.). |
+| `handlers/Gradescope/` | Gradescope-specific handler modules (prep, scores, canvas integration, cuts, brief creation, grade upload). |
+| `functions/` | Pure business logic split by domain. |
+| `functions/canvas api/` | Canvas LMS REST API wrappers (courses, rosters, assignments, gradebook, bulk grading). |
+| `functions/canvas UI and local functions/` | UI helpers for Canvas connectivity and course/section table display. |
+| `www/` | Static assets served by Shiny (images, templates, grade threshold CSV, PowerPoint templates). |
+| `dev.R` | Developer scratch file for manual debugging — not used in production. |
+
+### Bundled R Runtime (`r-win/`)
+
+A **portable, self-contained R 4.3.2 installation** committed directly into the repo. It includes:
+
+- `bin/` — R executable and supporting binaries.
+- `library/` — **Pre-installed CRAN packages** (all dependencies listed in `req.txt` plus transitive deps). This is the critical piece that makes the app work without the user installing R or any packages.
+- `etc/`, `include/`, `modules/`, `share/`, `src/`, `Tcl/` — standard R runtime support files.
+
+The Electron main process sets the following environment variables so R uses only the bundled library:
+```
+R_LIBS       = r-win/library
+R_LIBS_USER  = r-win/library
+R_LIBS_SITE  = r-win/library
+R_LIB_PATHS  = r-win/library
+```
+
+`start-shiny.R` pins `.lib.loc` to `R_LIB_PATHS` at startup, ensuring R never looks at a user-level library.
+
+---
+
+## Shiny App Structure
+
+The Shiny app is organized as a modular single-file app (`app.R`) with dynamically sourced handlers:
+
+```
+shiny/
+├── app.R                    # UI layout (navbarPage with tabs) + server wiring
+├── global.R                 # Shared config, grade thresholds, package loader
+├── req.txt                  # Package dependency list
+├── handlers/
+│   ├── Home Page API.R      # Home/landing page
+│   ├── Canvas API Handler.R # Canvas gradebook tab logic
+│   ├── Create Brief With Canvas Handler.R
+│   ├── settings.R           # Settings page (API tokens, grade thresholds)
+│   ├── FAQ.R
+│   └── Gradescope/          # All Gradescope workflow tabs
+│       ├── gs_prep.R
+│       ├── gs_scores.R
+│       ├── gs_canvas.R
+│       ├── gs_cuts.R
+│       ├── gs_createbrief.R
+│       └── gs_updategrades.R
+├── functions/
+│   ├── brief_from_gradescope.R
+│   ├── brief_manual_functions.R
+│   ├── grading_template_from_canvas.R
+│   ├── pre_WPR_prep_functions.R
+│   ├── Brief from Canvas API Functions.R
+│   ├── canvas api/          # REST wrappers for Canvas LMS
+│   │   ├── api_utils.R
+│   │   ├── get_course_list.R
+│   │   ├── get_course_gradebook.R
+│   │   ├── get_student_roster.R
+│   │   ├── grade_assignments_bulk.R
+│   │   └── ... (other API endpoints)
+│   └── canvas UI and local functions/
+│       ├── connection_ui.R
+│       ├── load_courses.R
+│       └── table_courses.R
+└── www/                     # Static assets
+    ├── PANE.png             # App logo
+    ├── template.pptx        # PowerPoint template for briefs
+    ├── template_gs.pptx     # Gradescope-specific template
+    ├── GradeThresholds.csv  # Default grade scale
+    └── input template.xlsx
+```
+
+**Main app tabs:**
+1. **Home** — landing page with connectivity status.
+2. **Canvas Gradebook** — pull gradebook from Canvas API, view assignment group stats, course grade stats, upload grades back.
+3. **Gradescope Brief** — multi-step workflow: preparation → input scores → Canvas access → cut data → generate brief → upload scores.
+4. **Manual Brief** — upload data manually, create brief, view distributions and version summaries.
+5. **Settings** — Canvas API token management, grade threshold configuration.
+6. **FAQ** — help content.
+
+User settings are stored in `~/Documents/Grade Analysis Tool Settings/` (grade thresholds, Canvas API token, course/section/assignment defaults).
+
+---
+
+## Build and Release
+
+**Prerequisites:** Node.js, Yarn, and a GitHub token for publishing.
+
+For more details on deploying the app go to:
+ Sharepoint -> Core Physics -> Faculty Development -> Course Director Academy -> Grade Analysis Tool
+
+```bash
+# Install Node dependencies
+yarn install
+
+# Run in development
+yarn start
+
+# Build installer (local only)
+yarn build
+
+# Build and publish to GitHub Releases
+yarn dist
+```
+
+The build uses `electron-builder` with NSIS targeting Windows. Key `package.json` build config:
+- `asar: false` — the app is **not** packed into an asar archive (required because R needs direct filesystem access to `r-win/` and `shiny/`).
+- `extraResources: ["src/**/*"]` — ensures `src/` files are included.
+- `nsis.include: "installer/installer.nsh"` — custom NSIS installer script.
+- Auto-update publishes to GitHub Releases (`provider: "github"`).
+
+**Release steps:**
+1. `yarn start` — verify the app runs locally.
+2. Bump `version` in `package.json`.
+3. `yarn dist` — builds and publishes to GitHub Releases.
+4. On GitHub, take the release out of draft / mark as latest.
+
+---
+
+## R Library Packaging and Update Checklist
+
+The bundled R library in `r-win/library/` is the mechanism that lets users run the app without installing R or packages. Here is how to update it.
+
+### How it works
+
+- `get-r-win.sh` downloads and extracts a portable R binary (currently R 4.3.2) into `r-win/`.
+- `add-cran-binary-pkgs.R` reads a package list, resolves all transitive dependencies, downloads Windows binary packages from CRAN, and installs them into `r-win/library/`. It also strips `help/`, `doc/`, `tests/`, and other non-essential directories to reduce size.
+- `shiny/req.txt` is the authoritative list of packages the Shiny app loads at runtime.
+
+### Update Checklist
+
+Use this when you need to add, remove, or update R packages in the bundled library:
+
+- [ ] **1. Edit `shiny/req.txt`** — add or remove the package name(s) your Shiny code needs.
+- [ ] **2. Update `add-cran-binary-pkgs.R`** — if the new package isn't already in the `cran_pkgs` vector, add it there as well. This script handles dependency resolution, but explicitly listing top-level packages ensures nothing is missed.
+- [ ] **3. Run `add-cran-binary-pkgs.R`** — execute from the repo root (`Rscript add-cran-binary-pkgs.R`). This downloads binary packages and installs them into `r-win/library/`. You need a working R installation on your dev machine to run this.
+- [ ] **4. Verify** — run `yarn start` and confirm the app launches without package-not-found errors. Check the R console output (Debug → Toggle R Console) for any missing dependency warnings.
+- [ ] **5. Commit `r-win/library/`** — the entire library directory is committed to the repo. Make sure new package folders are staged.
+- [ ] **6. Test the built installer** — run `yarn build`, install the output `.exe`, and confirm the app works from the installed location (paths differ from dev).
+
+### Upgrading the R version
+
+- [ ] Edit `get-r-win.sh` to point to the new R version URL.
+- [ ] Run the script to replace `r-win/` with the new R installation.
+- [ ] Re-run `add-cran-binary-pkgs.R` to reinstall all packages against the new R version.
+- [ ] Test thoroughly — binary package compatibility can change between R minor versions.
+
+---
+
+## Troubleshooting Guide
+
+### Where to look first
+
+| Symptom | Where to check |
+|---------|---------------|
+| App won't start / stuck on loading screen | Electron logs: `%APPDATA%/Grade Analysis Tool/logs/main.log` |
+| R process crashes on startup | Toggle R Console (Debug menu) to see R's stdout/stderr |
+| Missing package error in R | Check `r-win/library/` for the package folder; re-run `add-cran-binary-pkgs.R` |
+| Canvas API errors | Settings tab → verify API token; check `~/Documents/Grade Analysis Tool Settings/token.rds` |
+| Orphaned R processes after crash | The app writes PIDs to `%APPDATA%/Grade Analysis Tool/rPIDs.txt` and kills them on next launch. Manually check Task Manager for `R.exe` processes. |
+| Auto-update not working | Check `electron-updater` logs in `main.log`. Ensure the GitHub Release is published (not draft). |
+| Port conflict | The app picks a random port 3000–8000 and verifies it is available. If you have many services running, this can cause retry loops. |
+
+### Key log locations
+
+- **Electron logs:** `%APPDATA%/Grade Analysis Tool/logs/main.log` (via `electron-log`)
+- **R console output:** Enable via Debug → Toggle R Console in the app menu bar.
+- **PID file:** `%APPDATA%/Grade Analysis Tool/rPIDs.txt`
+- **User settings:** `~/Documents/Grade Analysis Tool Settings/`
+
+### Debug mode
+
+- `Debug → Toggle R Console` — restarts R with a visible console window. Closing that console window will also close the app.
+- `Debug → Open Developer Tools` (`Ctrl+Shift+I`) — opens Chromium DevTools for the Electron renderer.
+- In `main.js`, set `debugRConsole = true` to always show the R console, or `isDevUpdates = true` to test the auto-updater against `dev-app-update.yml`.
+- Add a `browser()` line of code in the R script and when it runs that it will go into debug mode in R.
+---
+
+## Installation and Usage
+
+1. Download the latest `.exe` installer from [GitHub Releases](https://github.com/kfilip10/grade-analysis-tool-win/releases).
+2. Run the installer — it is a one-click NSIS install, no configuration needed.
+3. Launch **Grade Analysis Tool** from the desktop shortcut or Start Menu.
+4. On the **Settings** tab, enter your Canvas API token.
+5. Use the **Canvas Gradebook** or **Gradescope Brief** tabs to pull data and generate analysis briefs.
 - Cadet Admin Data
 	- ID - canvas ID. This is not used in the brief but is useful for data validation during grade data entry in large enrollment courses (core)
 	- Course - course identifier. This is only used in the brief if it is a core course (201/251)
