@@ -206,10 +206,11 @@ The build uses `electron-builder` with NSIS targeting Windows. Key `package.json
 - Auto-update publishes to GitHub Releases (`provider: "github"`).
 
 **Release steps:**
-1. `yarn start` — verify the app runs locally.
-2. Bump `version` in `package.json`.
-3. `yarn dist` — builds and publishes to GitHub Releases.
-4. On GitHub, take the release out of draft / mark as latest.
+1. Load the github token into your session. Choose one of these options depending on your terminal: From Command Prompt:`set GH_TOKEN=ghp_your_token_here` OR From PowerShell: `$env:GITHUB_TOKEN="ghp_YourTokenHere"` 
+2. `yarn start` — verify the app runs locally.
+3. Bump `version` in `package.json`.
+4. `yarn dist` — builds and publishes to GitHub Releases.
+5. On GitHub, take the release out of draft / mark as latest.
 
 ---
 
@@ -223,7 +224,7 @@ The bundled R library in `r-win/library/` is the mechanism that lets users run t
 - `add-cran-binary-pkgs.R` reads a package list, resolves all transitive dependencies, downloads Windows binary packages from CRAN, and installs them into `r-win/library/`. It also strips `help/`, `doc/`, `tests/`, and other non-essential directories to reduce size.
 - `shiny/req.txt` is the authoritative list of packages the Shiny app loads at runtime.
 
-### Update Checklist
+### Update R library Checklist
 
 Use this when you need to add, remove, or update R packages in the bundled library:
 
@@ -435,7 +436,6 @@ Each student’s summary also includes the maximum number of page views and part
 - Removed grade bin width parameter
 - Increased max file size upload to 30MB for cut sheets
 - [ ] Canvas token way to check if it is expired
-- This one is expired: 15453~djjwyPsspgsEZhJ4KYKCAMc8H3aXcd7Irz3mKXMcicQPRXREcSB7xWiXgXhPOCrO
 - Added 'restore to default grade values' in settings
 	- Reloads the grades.threshold file from www folder
 - [ ] improve error handling for incomplete grading template files
