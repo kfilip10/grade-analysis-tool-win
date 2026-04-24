@@ -120,7 +120,24 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     # Remove the modal
     removeModal()
     # Process CSVs for the current folder
-    csv_results <- process_all_csvs(folder)
+    csv_results <- tryCatch(
+      process_all_csvs(folder),
+      error = function(e) {
+        showModal(modalDialog(
+          title = "Error Processing Zip File",
+          tags$div(
+            tags$p(tags$b("An error occurred while processing the uploaded file:")),
+            tags$p(conditionMessage(e)),
+            tags$p("Make sure you use the exact evaluations zip file downloaded from Gradescope (e.g.,", tags$b("'Assignment_name_evaluations.zip'"), ")."),
+            tags$p("If the issue persists, contact the current app maintainer, found on the app home screen.")
+          ),
+          footer = modalButton("OK"),
+          easyClose = TRUE
+        ))
+        NULL
+      }
+    )
+    if (is.null(csv_results)) return()
     csv_results$version <- version  # Assign the version to all processed rows
     
     csv_results <- csv_results %>% 
@@ -244,6 +261,8 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
   # Function to process individual CSV files
   process_csv <- function(file_path, folder_name) {
     csv_data <- read_csv(file_path, col_types = cols(.default = "c"))
+    csv_data <- csv_data[rowSums(!is.na(csv_data)) > 0, ]
+
     #browser()
     #find 'point values' row in first column
     #FUTURE NOTES: If Gradescope updates this format, this will break
@@ -260,9 +279,20 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     cut_values <- cut_values[!is.na(cut_values)]
     point_value <- cut_values[1]
     cut_values <- cut_values[-1]
-    
-    csv_filtered <- csv_data[1:point_values_row_number-1,]
-    
+  
+    # Find scoring method row
+    col1_clean <- ifelse(is.na(csv_data[[1]]), "", csv_data[[1]])
+    scoring_match_idx <- which(agrepl("scoring method", col1_clean, ignore.case = TRUE, max.distance = 0.3))
+    scoring_method <- "negative"
+    if (length(scoring_match_idx) > 0 && ncol(csv_data) >= 2) {
+      val <- as.character(csv_data[[2]][tail(scoring_match_idx, 1)])
+      if (!is.na(val) && nchar(trimws(val)) > 0) {
+        scoring_method <- tolower(trimws(val))
+      }
+    }
+
+    csv_filtered <- csv_data[1:point_values_row_number-1, ]
+    csv_filtered <- csv_filtered[!is.na(csv_filtered[[1]]), ]
     # Identify columns corresponding to cuts
     # do so by finding columns that have only "true" or "false" in the column
     
@@ -274,10 +304,18 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     # Get the names of these columns
     cut_columns <- names(cut_column_check[cut_column_check])
     
+
+    # Calculate the percent TRUE for each cut
     # Calculate the percent TRUE for each cut
     cut_summary <- sapply(cut_columns, function(cut_col) {
-      cut_data <- csv_filtered[[cut_col]]
-      sum(cut_data == "true", na.rm = TRUE) / (length(cut_data) - 1)
+      cut_data <- tolower(csv_filtered[[cut_col]])
+      # positive scoring: TRUE = earned credit, so count FALSE as errors
+      error_count <- if (scoring_method == "positive") {
+        sum(cut_data == "false", na.rm = TRUE)
+      } else {
+        sum(cut_data == "true", na.rm = TRUE)
+      }
+      error_count / (length(cut_data) - 1)
     })
     
     question_name <- basename(file_path)
