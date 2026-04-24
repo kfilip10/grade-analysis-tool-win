@@ -143,7 +143,7 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     csv_results <- csv_results %>% 
       mutate(number = as.numeric(str_extract(question, "^[0-9]+\\.?[0-9]*")))
     
-    #remove the question number from the queston column
+    #remove the question number from the question column
     #find the first underscore and delete everyhing before and including it
     csv_results <- csv_results %>% 
       mutate(question = str_remove(question, "^[0-9]+\\.?[0-9]*_"))
@@ -308,6 +308,7 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     # Calculate the percent TRUE for each cut
     # Calculate the percent TRUE for each cut
     cut_summary <- sapply(cut_columns, function(cut_col) {
+<<<<<<< HEAD
       cut_data <- tolower(csv_filtered[[cut_col]])
       # positive scoring: TRUE = earned credit, so count FALSE as errors
       error_count <- if (scoring_method == "positive") {
@@ -316,6 +317,10 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
         sum(cut_data == "true", na.rm = TRUE)
       }
       error_count / (length(cut_data) - 1)
+=======
+      cut_data <- csv_filtered[[cut_col]]
+      sum(cut_data == "true", na.rm = TRUE) / (length(cut_data) )
+>>>>>>> 91f2006ec2e0c23a1073d2de84d811bb30d7e8a9
     })
     
     question_name <- basename(file_path)

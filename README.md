@@ -272,6 +272,9 @@ Use this when you need to add, remove, or update R packages in the bundled libra
 - Add a `browser()` line of code in the R script and when it runs that it will go into debug mode in R.
 ---
 
+# Old Dev Notes
+These are old dev notes from kevin, I left them in there just in case a feature is investigated and mentioned here. They probably aren't super useful.
+
 ## Installation and Usage
 
 1. Download the latest `.exe` installer from [GitHub Releases](https://github.com/kfilip10/grade-analysis-tool-win/releases).
