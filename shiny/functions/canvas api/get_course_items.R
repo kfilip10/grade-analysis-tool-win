@@ -29,6 +29,9 @@ get_course_items <- function(course_id, item, include = NULL) {
   args <- list(per_page = 100)
   include <- iter_args_list(include, "include[]")
   args <- c(args, include)
-  process_response(url, args) %>%
-    dplyr::mutate(course_id = course_id)
+  result <- process_response(url, args)
+  if (is.null(result)) return(NULL)
+  result %>% dplyr::mutate(course_id = course_id)
+
+
 }

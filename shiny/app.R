@@ -19,6 +19,8 @@ req <- scan(file.path(getwd(), "req.txt"), character(), quiet = TRUE)
 # This was how it was in standalone
 # invisible so no return/console output
 
+DEBUG <- FALSE  # Change this to FALSE when building for deployment
+
 # character.only = T - only use the character strings in the list
 invisible(lapply(req, library, character.only = T)) # nolint
 
@@ -93,15 +95,13 @@ ui <- fluidPage(
   ),
 
     # Conditional debug button - only shows in development
-  conditionalPanel(
-    condition = "typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')",
-    div(
-      actionButton("debug_button", "Debug", 
-                   class = "debug-button",
-                   title = "Click to trigger browser() for debugging"),
-      style = "position: relative;"
-    )
-  ),
+if (DEBUG) {
+  div(
+    actionButton("debug_button", "🐛 Debug", 
+                 style = "position: absolute; top: 10px; right: 10px; z-index: 1000; background-color: #dc3545; color: white; border: none; border-radius: 3px; padding: 5px 10px; font-size: 12px;",
+                 title = "Click to trigger browser() for debugging")
+  )
+},
 
   # navbarPage - creates a navbar at the top of the page
   navbarPage(
@@ -210,11 +210,16 @@ ui <- fluidPage(
  
 # Server ----
 server <- function(input, output, session) {
-    # Debug button handler - only active in development
-  observeEvent(input$debug_button, {
-    cat("Debug button clicked - entering browser mode\n")
-    browser()  # This will pause execution and open the debugger
-  })
+
+  
+
+  # Debug button handler - only active when DEBUG is TRUE
+  if (DEBUG) {
+    observeEvent(input$debug_button, {
+      cat("Debug button clicked - entering browser mode\n")
+      browser()
+    })
+  }
   
   output$connectivityStatus <- renderText({
     if (check_internet_access()) {

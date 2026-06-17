@@ -28,6 +28,10 @@ get_student_roster <- function(course_df, error_list, instructor.search.key = "i
   }
   
   enrollment_df <- do.call(rbind, enrollment.list)
+
+  if (is.null(enrollment_df) || nrow(enrollment_df) == 0) {
+  return(NULL)
+  }
   #browser()
   
   # user.df <- do.call(rbind, user.list) %>%select(id,email) %>%rename(user_id=id) %>% distinct()

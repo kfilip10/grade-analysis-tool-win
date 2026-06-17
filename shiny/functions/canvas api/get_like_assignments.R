@@ -8,8 +8,10 @@ get_like_assignments <- function(course.df){
     assignments <- lapply(unique(course.df$id), function(x,i){
       incProgress(1/length(unique(course.df$id)))
       #browser()
-      get_course_items(course_id = x, item = "assignments") %>%
-        select(id,name,points_possible,assignment_group_id,course_id,published)},i = seq_along(course.df))
+      items <- get_course_items(course_id = x, item = "assignments")
+      if (is.null(items)) return(NULL)
+      items %>% select(id, name, points_possible, assignment_group_id, course_id, published)
+      },i = seq_along(course.df))
     })
 
 

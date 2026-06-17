@@ -20,6 +20,7 @@ createCanvasPrepPage <- function() {
         actionButton(inputId = "refreshSectionData", label = "Refresh Section Data"),
         h4("Courses Selected:"),
         uiOutput("selected_courses_list"),
+        uiOutput("canvas_error_list"),   # non-200 responses
       ),
       mainPanel(
         h3("1. Select Courses"),
@@ -165,6 +166,9 @@ canvas_grade_upload <- function() {
 
 
 canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
+
+  canvas_errorlist <- reactiveVal()
+  sidebar_errors <- reactiveVal(list()) 
   #### API Load, check, and display UI ####
   # Check the API connection status and logs in
   connection_status <- reactive({
@@ -413,7 +417,11 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
     selected_indices <- input$courseCheckboxUITable_rows_selected
     selected_courses_df <- course_list_df()[selected_indices, , drop = FALSE]
     selected_courses(selected_courses_df)
-
+    # Reset cached roster so a new course selection triggers a fresh load
+    roster_course_df(NULL)
+    loaded_course_df(NULL)
+    course_gradebook(NULL)
+    sidebar_errors(list())   # <-- add this
     # print(selected_items)
   })
 
@@ -680,6 +688,9 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
     # req(input$assignmentCheckbox)
     # get the rosters for all courses if it hasn't been already
     # browser()
+    clear_canvas_errors() #used for the error-handling on non-200 responses
+    sidebar_errors(list())
+
     showModal(modalDialog(
       title = "Loading",
       "Loading Canvas data. This step may take a while. If you are a PH201/202 Course Director
@@ -698,6 +709,18 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
       )
     }
     roster.course <- roster_course_df()
+    if (is.null(roster.course) || nrow(roster.course) == 0) {
+      removeModal()
+      errors <- get_canvas_errors()
+      showModal(modalDialog(
+        title = "Roster Load Failed",
+        "No student roster data could be loaded. This is likely caused by authorization errors on the selected courses. See the error details below.",
+        if (length(errors) > 0) tags$ul(lapply(errors, function(e) tags$li(paste0("Course ", e$course_id, " — ", e$code, ": ", e$message)))),
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
     # browser()
     roster.course <- roster.course %>% mutate(
       `Max Points` = grades.unposted_current_points / grades.unposted_current_score * 100
@@ -859,6 +882,13 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
         easyClose = TRUE,
         footer = NULL
       ))
+
+      # Error handling non-200 responses from the API calls, which are stored in canvas_errorlist reactive value, and show a modal with the error messages if there are any errors
+      errors <- get_canvas_errors()
+      if (length(errors) > 0) {
+        sidebar_errors(errors)
+      }
+
       enable("download_template_canvas")
       enable("download_gradebook_canvas")
     })
@@ -1322,5 +1352,23 @@ canvasPrep_Handler <- function(input, output, session, canvas_api_token) {
 
   observeEvent(input$DenyUpload, {
     removeModal()
+  })
+
+    output$canvas_error_list <- renderUI({
+    errs <- sidebar_errors()
+    if (length(errs) == 0) return(NULL)
+    tagList(
+      tags$hr(),
+      h4(style = "color: #781d1d;", "Load Errors:"),
+      tags$p(style = "font-size: 0.85em;", "These courses returned errors and were skipped:"),
+      tags$ul(
+        lapply(errs, function(e) {
+          tags$li(
+            style = "color: #781d1d; font-size: 0.85em;",
+            paste0("Course ", e$course_id, " — ", e$code, ": ", e$message)
+          )
+        })
+      )
+    )
   })
 }

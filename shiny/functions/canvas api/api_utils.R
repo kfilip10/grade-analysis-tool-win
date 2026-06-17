@@ -10,6 +10,18 @@
 # env for the Canvas domain
 cdenv <- new.env()
 
+#Error accumulator
+canvas_error_log <- new.env(parent = emptyenv())
+canvas_error_log$errors <- list()
+
+clear_canvas_errors <- function() {
+  canvas_error_log$errors <- list()
+}
+
+get_canvas_errors <- function() {
+  canvas_error_log$errors
+}
+
 #' @name apihelpers
 #' @md
 
@@ -89,14 +101,21 @@ canvas_query <- function(urlx, args = NULL, type = "GET") {
   }
 
   resp <- do.call(type, resp_fun_args)
-  # Make the API request
-  response <- httr::GET(urlx, httr::add_headers(Authorization = paste("Bearer", check_token())))
 
-  # Check the response status code
-  if (httr::status_code(response) != 200) {
-    stop("Failed to retrieve from Canvas. Please check your authentication and API endpoint. URL: ", urlx)
+  status <- httr::status_code(resp)
+
+  if (status != 200) {
+    course_id <- stringr::str_match(urlx, "courses/(\\d+)")[, 2]
+    if (is.na(course_id)) course_id <- "unknown"
+    canvas_error_log$errors <- c(canvas_error_log$errors, list(list(
+      course_id = course_id,
+      code      = status,
+      message   = httr::http_status(resp)$message,
+      url       = urlx
+    )))
+    return(NULL)
   }
-  httr::stop_for_status(resp)
+
   resp
 }
 
@@ -166,14 +185,11 @@ do_query <- function(endpoint, args = NULL, method = "GET", process_response = (
 #' @importFrom magrittr `%>%`
 process_response <- function(url, args) {
   resp <- canvas_query(url, args, "GET")
+  if (is.null(resp)) return(NULL)   # 403 logged, skip silently
 
   d <- paginate(resp) %>%
     purrr::map(httr::content, "text") %>%
     purrr::map(jsonlite::fromJSON, flatten = TRUE)
-
-  # flatten to data.frame if able, otherwise return as is
-  # d <- tryCatch(purrr::map_df(d, purrr::flatten_df),
-  #              error = function(e) d)
   dplyr::bind_rows(d)
 }
 

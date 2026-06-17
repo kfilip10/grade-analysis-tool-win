@@ -6,6 +6,7 @@ get_section_info <- function(course_id, section_id=NULL,include=NULL) {
   args <- list(per_page = 100)
   include <- iter_args_list(include, "include[]")
   #args <- c(args, include)
-  process_response(url, include) %>%
-    dplyr::mutate(course_id = course_id)
+  result <- process_response(url, include)
+  if (is.null(result)) return(NULL)
+  result %>% dplyr::mutate(course_id = course_id)
 }
