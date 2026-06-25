@@ -1369,37 +1369,34 @@ cuts_table <- function(question_df, cuts_df, cut_filter_threshold) {
     print(rlang::trace_back())
     return(flextable(data.frame(Message = "Error generating cuts table")))
   })
-  
-  q_names <- unique(question_df$name)
-  # browser()
-  cuts_df <- cuts_df %>% mutate(key = paste0("V", version, "-", number, ": ", question))
+   q_names <- unique(question_df$name)
 
-  # filter cuts_df based on matches to q_names
+  # Primary match: extract question number from q_names (e.g. "1.1 Kinematics (10 pts)" → 1.1)
+  # Works for both pure-numeric ("1.1") and descriptive ("1.1 kinematics") question names
+  q_numbers <- suppressWarnings(as.numeric(str_extract(q_names, "^[0-9]+\\.?[0-9]*")))
+  q_numbers <- q_numbers[!is.na(q_numbers)]
+
+  # Extract version numbers (question_df$version is "v1"; cuts_df$version is numeric 1)
+  q_versions <- suppressWarnings(unique(as.numeric(gsub("[^0-9]", "", question_df$version))))
+  q_versions <- q_versions[!is.na(q_versions)]
+
   cuts_df_filtered <- cuts_df %>%
-    filter(sapply(key, function(q) any(agrepl(q, q_names, max.distance = 0.1))))
+    filter(
+      suppressWarnings(as.numeric(version)) %in% q_versions,
+      number %in% q_numbers
+    )
 
-  # cuts_df_filtered <- cuts_df %>%
-  #  filter(sapply(question, function(q) any(agrepl(q, q_names, max.distance = 0.2))) )
-
+  # Fallback: fuzzy string matching for edge cases (key computed as vector, NOT added as column)
   if (nrow(cuts_df_filtered) == 0) {
+    key_vec <- paste0("V", cuts_df$version, "-", cuts_df$number, ": ", cuts_df$question)
     cuts_df_filtered <- cuts_df %>%
-      filter(sapply(key, function(q) any(agrepl(q, q_names, max.distance = 0.2))))
+      filter(sapply(key_vec, function(q) any(agrepl(q, q_names, max.distance = 0.2))))
   }
-  
+
   # If still no matches, return empty table with message
   if (nrow(cuts_df_filtered) == 0) {
     cat("No matching cuts found for this question\n")
     return(flextable(data.frame(Message = "No cuts applied for this question")))
-  }
-  
-  # filter out the cuts that are less than threshold percent
-  cuts_df_filtered <- cuts_df_filtered %>%
-    filter(cut_percent_true > cut_filter_threshold)
-  
-  # If no cuts pass threshold, return message
-  if (nrow(cuts_df_filtered) == 0) {
-    cat("No cuts above threshold for this question\n")
-    return(flextable(data.frame(Message = paste0("No cuts above ", cut_filter_threshold*100, "% threshold"))))
   }
   
   # now I want to make a flextable of the cuts, but I want to sort them by version then by cut_percent_true

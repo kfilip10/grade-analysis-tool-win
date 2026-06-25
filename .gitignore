@@ -7,6 +7,8 @@ yarn-error.log*
 lerna-debug.log*
 HOW TO UPDATE.md
 
+shiny/.Rhistory
+
 build 
 #r-win
 shiny/test
