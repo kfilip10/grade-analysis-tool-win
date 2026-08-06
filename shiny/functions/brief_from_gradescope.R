@@ -198,32 +198,33 @@ gs_makebriefmain <- function(question_list, df_canvas_adj, missing_roster, cuts_
            "\nFirst few labels:", paste(head(question_df$name, 3), collapse = ", ")))
       }
       
-      # Check for zero or negative max points
-      if (any(question_df$max <= 0, na.rm = TRUE)) {
-        stop(paste("Invalid max points (≤0) found in", df_name))
-      }
-      
-      # get the percentage - protect against division by zero
-      question_df$percent <- ifelse(question_df$max > 0,
-        question_df$value / question_df$max,
-        0
-      )
+      is_bonus <- all(question_df$max == 0, na.rm = TRUE)
 
-      # get the grades
-      if (!exists("letter_grade") || !exists("breaks") || !exists("grades")) {
-        stop("Required variables 'letter_grade', 'breaks', or 'grades' not found in environment")
+      if (any(question_df$max < 0, na.rm = TRUE)) {
+        stop(paste("Invalid max points (<0) found in", df_name))
       }
-      question_df$grade <- sapply(question_df$percent, letter_grade, breaks, grades)
 
-      # format the percentage
-      question_df$percent <- question_df$percent * 100
+      if (is_bonus) {
+        question_df$percent <- NA_real_
+        question_df$grade <- NA_character_
+      } else {
+        question_df$percent <- ifelse(question_df$max > 0, question_df$value / question_df$max, 0)
+        question_df$grade <- sapply(question_df$percent, letter_grade, breaks, grades)
+        question_df$percent <- question_df$percent * 100
+      }
+
+    
 
       # get the question group name
       question_group_name <- df_name
       question_df <- question_df %>% arrange(version)
 
-      ppt <- gen_question_slide(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold)
-      
+      if (is_bonus) {
+        ppt <- gen_bonus_question_slide(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold)
+      } else {
+        ppt <- gen_question_slide(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold)
+      }
+
     }, error = function(e) {
       cat("=====================================\n")
       cat(paste("Error processing question group:", df_name, "\n"))
@@ -249,7 +250,7 @@ gs_makebriefmain <- function(question_list, df_canvas_adj, missing_roster, cuts_
 # 1. Summaries ----
 
 ## 1A. PPT Initialize ----
-ppt_init <- function(courseTitle = "PH2XX", eventTitle = "WPRX") {
+ppt_init <- function(courseTitle = "PH2XX", eventTitle = "WPR") {
   tryCatch({
     # Validate inputs
     if (is.null(courseTitle) || courseTitle == "") {
@@ -258,7 +259,7 @@ ppt_init <- function(courseTitle = "PH2XX", eventTitle = "WPRX") {
     }
     if (is.null(eventTitle) || eventTitle == "") {
       warning("eventTitle is empty - using default")
-      eventTitle <- "WPRX"
+      eventTitle <- "WPR"
     }
     
     # Check if wd exists
@@ -1059,6 +1060,11 @@ gen_question_slide <- function(ppt, question_df, question_group_name, cuts_df, c
 
   return(ppt)
 }
+
+
+
+
+
 ## 2A. Score PDF FNC ----
 # q.score.plot <- plotHisto(x,"percent",str_c("V",version.num,":", question.num," Score Distribution"),"Score (%)","Count",version_palette[i],bin.width)
 # df = question_df
@@ -1431,4 +1437,187 @@ cuts_table <- function(question_df, cuts_df, cut_filter_threshold) {
 
 
   return(cuts_flextable)
+}
+
+
+## 2E. Bonus question slide ----
+# Bonus questions have max points of 0, so percent/grade are meaningless here —
+# show raw point distribution and simple stats instead of the grades table
+gen_bonus_question_slide <- function(ppt, question_df, question_group_name, cuts_df, cut_filter_threshold) {
+  tryCatch({
+    if (is.null(question_df) || !is.data.frame(question_df) || nrow(question_df) == 0) {
+      stop("question_df must be a non-empty data frame")
+    }
+    required_cols <- c("version", "name", "value")
+    missing_cols <- setdiff(required_cols, names(question_df))
+    if (length(missing_cols) > 0) {
+      stop(paste("question_df missing required columns:", paste(missing_cols, collapse = ", ")))
+    }
+    if (all(is.na(question_df$value))) {
+      stop("All values in 'value' column are NA")
+    }
+  }, error = function(e) {
+    cat("=====================================\n")
+    cat("Error in gen_bonus_question_slide:\n")
+    cat("Question group:", question_group_name, "\n")
+    cat("=====================================\n")
+    cat("Error message:", conditionMessage(e), "\n\n")
+    cat("Full traceback:\n")
+    print(rlang::trace_back())
+    cat("=====================================\n")
+    stop(e)
+  })
+
+  # Make the slide
+  ppt <- add_slide(ppt, layout = "question", master = "Office Theme")
+  ppt <- ph_with(ppt,
+    value = str_c(question_group_name, " (Bonus)"),
+    location = ph_location_label(ph_label = "Title")
+  )
+
+  padding <- 0.125
+  left_width <- 6
+  right_col_start <- 6 + 2 * padding
+  right_width <- 8 - padding
+  right_top_start <- 0.1
+  plot_height <- 3.75
+
+  ### a. Bonus Score Distribution ----
+  q.bonus.plot <- plot_bonus_question(question_df)
+  ppt <- ph_with(ppt,
+    value = q.bonus.plot,
+    location = ph_location(
+      left = right_col_start, top = right_top_start,
+      width = right_width, height = plot_height
+    )
+  )
+
+  ### b. Bonus Summary Table ----
+  sum_flexTable <- summary_table_bonus_question(question_df)
+  dims <- dim_pretty(sum_flexTable)
+  sum_flex_table_height <- sum(dims$heights)
+  sum_flex_table_width <- sum(dims$width)
+
+  ppt <- ph_with(ppt,
+    value = sum_flexTable,
+    location = ph_location(
+      left = 0.05 + (left_width - sum_flex_table_width - .6) / 2,
+      top = 3.5,
+      height = sum_flex_table_height
+    )
+  )
+
+  ### c. Cuts Table ----
+  cuts_flextable <- cuts_table(question_df, cuts_df, cut_filter_threshold)
+  ppt <- ph_with(ppt,
+    value = cuts_flextable,
+    location = ph_location(
+      left = right_col_start,
+      top = right_top_start + plot_height + padding,
+      width = right_width
+    )
+  )
+
+  return(ppt)
+}
+
+## 2F. Bonus Score Distribution Plot ----
+plot_bonus_question <- function(df) {
+  tryCatch({
+    if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+      stop("df must be a non-empty data frame")
+    }
+    if (!"value" %in% names(df)) stop("df missing 'value' column")
+    if (all(is.na(df$value))) stop("All values in 'value' column are NA")
+  }, error = function(e) {
+    cat("Error in plot_bonus_question:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+
+  version_palette_q <- version_palette
+  if (length(unique(df$version)) > length(version_palette_q)) {
+    version_palette_q <- colorRampPalette(c("green", "orange"))(length(unique(df$version)))
+  }
+
+  df$legend <- str_c(df$version, " - Q", df$name)
+
+  df_hist <- df %>%
+    group_by(legend, value) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(legend) %>%
+    mutate(percent = count / sum(count) * 100)
+
+  q.bonus.plot <- ggplot(df_hist, aes(x = value, y = percent, fill = legend)) +
+    geom_col(
+      position = position_dodge(width = 0.6),
+      width = 0.6,
+      color = "black",
+      alpha = 0.6
+    ) +
+    theme_classic() +
+    scale_fill_manual(values = version_palette_q) +
+    labs(x = "Bonus Points Earned", y = "Percent of Students", fill = NULL) +
+    scale_x_continuous(breaks = seq(0, max(df$value, na.rm = TRUE), by = 0.5)) +
+    scale_y_continuous(
+      breaks = seq(0, 100, 10),
+      limits = c(0, 100),
+      expand = expansion(mult = c(0, 0.05))
+    ) +
+    theme(
+      text = element_text(size = 16),
+      legend.text = element_text(size = 10),
+      legend.title = element_text(size = 14),
+      legend.position = c(0.025, 0.925),
+      legend.justification = c(0, 1),
+      legend.background = element_rect(fill = "white", color = "black"),
+      legend.box.background = element_rect(color = "black", linewidth = 0.8),
+      panel.grid.major.y = element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank()
+    ) +
+    guides(fill = guide_legend(ncol = 1))
+
+  return(q.bonus.plot)
+}
+
+## 2G. Bonus Summary Table ----
+summary_table_bonus_question <- function(df) {
+  tryCatch({
+    if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+      stop("df must be a non-empty data frame")
+    }
+    required_cols <- c("version", "value")
+    missing_cols <- setdiff(required_cols, names(df))
+    if (length(missing_cols) > 0) {
+      stop(paste("df missing required columns:", paste(missing_cols, collapse = ", ")))
+    }
+  }, error = function(e) {
+    cat("Error in summary_table_bonus_question:\n")
+    cat("Message:", conditionMessage(e), "\n")
+    print(rlang::trace_back())
+    stop(e)
+  })
+
+  df.q.t.sum <- df %>%
+    group_by(version) %>%
+    summarise(
+      "Count" = n(),
+      "Mean" = round(mean(value, na.rm = TRUE), 2),
+      "Median" = round(median(value, na.rm = TRUE), 2),
+      "SD" = round(sd(value, na.rm = TRUE), 2),
+      "Min" = round(min(value, na.rm = TRUE), 2),
+      "Max" = round(max(value, na.rm = TRUE), 2)
+    )
+
+  df.q.sum.ft <- flextable(df.q.t.sum) %>%
+    align_text_col(align = "center") %>%
+    align_nottext_col(align = "center") %>%
+    colformat_double(digits = 2) %>%
+    fontsize(size = 15, part = "header") %>%
+    fontsize(size = 14) %>%
+    autofit()
+
+  return(df.q.sum.ft)
 }

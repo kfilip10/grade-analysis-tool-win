@@ -282,13 +282,22 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
   
     # Find scoring method row
     col1_clean <- ifelse(is.na(csv_data[[1]]), "", csv_data[[1]])
+
     scoring_match_idx <- which(agrepl("scoring method", col1_clean, ignore.case = TRUE, max.distance = 0.3))
+
     scoring_method <- "negative"
+
     if (length(scoring_match_idx) > 0 && ncol(csv_data) >= 2) {
       val <- as.character(csv_data[[2]][tail(scoring_match_idx, 1)])
       if (!is.na(val) && nchar(trimws(val)) > 0) {
         scoring_method <- tolower(trimws(val))
       }
+    }    
+    
+    # negative scoring reports rubric point values as their magnitude in the CSV,
+    # so flip sign for display: deductions read as negative, typed-positive bonus items read as positive
+    if (scoring_method == "negative") {
+      cut_values <- -cut_values
     }
 
     csv_filtered <- csv_data[1:point_values_row_number-1, ]
@@ -306,16 +315,17 @@ gs_cuts_server <- function(input, output, session,gs_data,gs_wizard_status){
     
 
     # Calculate the percent TRUE for each cut
-    # Calculate the percent TRUE for each cut
     cut_summary <- sapply(cut_columns, function(cut_col) {
       cut_data <- tolower(csv_filtered[[cut_col]])
       # positive scoring: TRUE = earned credit, so count FALSE as errors
+
       error_count <- if (scoring_method == "positive") {
         sum(cut_data == "false", na.rm = TRUE)
       } else {
         sum(cut_data == "true", na.rm = TRUE)
       }
-      error_count / (length(cut_data) - 1)
+
+      return(error_count / (length(cut_data)))
     })
     
     question_name <- basename(file_path)
